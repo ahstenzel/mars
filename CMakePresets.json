@@ -1,0 +1,276 @@
+{
+	"version": 2,
+	"configurePresets": [
+		{
+			"name": "base",
+			"hidden": true,
+			"description": "Build binary.",
+			"architecture": {
+				"value": "x64"
+			},
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"cacheVariables": {
+				"CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+			},
+			"warnings": {
+				"unusedCli": false
+			}
+		},
+		{
+			"name": "base-os-windows",
+			"hidden": true,
+			"vendor": {
+				"microsoft.com/VisualStudioSettings/CMake/1.0": {
+					"hostOS": [
+						"Windows"
+					]
+				}
+			},
+			"cacheVariables": {
+				"MARS_OS": "windows"
+			}
+		},
+		{
+			"name": "base-os-linux",
+			"hidden": true,
+			"vendor": {
+				"microsoft.com/VisualStudioSettings/CMake/1.0": {
+					"hostOS": [
+						"Linux"
+					]
+				}
+			},
+			"cacheVariables": {
+				"MARS_OS": "linux"
+			}
+		},
+		{
+			"name": "base-gen-msvc2022",
+			"hidden": true,
+			"generator": "Visual Studio 17 2022",
+			"cacheVariables": {
+				"MARS_GEN": "msvc2022"
+			}
+		},
+		{
+			"name": "base-gen-mingw",
+			"hidden": true,
+			"generator": "MinGW Makefiles",
+			"cacheVariables": {
+				"MARS_GEN": "mingw",
+				"CMAKE_C_COMPILER": "gcc",
+				"CMAKE_CXX_COMPILER": "g++"
+			},
+			"environment": {
+				"PATH": "C:/msys64/ucrt64/bin;$penv{PATH}"
+			}
+		},
+		{
+			"name": "base-gen-clang",
+			"hidden": true,
+			"generator": "MinGW Makefiles",
+			"cacheVariables": {
+				"MARS_GEN": "clang",
+				"CMAKE_C_COMPILER": "clang",
+				"CMAKE_CXX_COMPILER": "clang++",
+				"CMAKE_C_FLAGS": "-Wno-pointer-sign"
+			},
+			"environment": {
+				"PATH": "C:/msys64/clang64/bin;$penv{PATH}"
+			},
+			"vendor": {
+				"microsoft.com/VisualStudioSettings/CMake/1.0": {
+					"intelliSenseMode": "windows-clang-x64"
+				}
+			}
+		},
+		{
+			"name": "base-gen-ninja",
+			"hidden": true,
+			"generator": "Ninja Multi-Config",
+			"cacheVariables": {
+				"MARS_GEN": "gcc"
+			}
+		},
+		{
+			"name": "base-cfg-debug",
+			"hidden": true,
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
+		},
+		{
+			"name": "base-cfg-release",
+			"hidden": true,
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release"
+			}
+		},
+		{
+			"name": "base-lib-static",
+			"hidden": true,
+			"cacheVariables": {
+				"MARS_BUILD_SHARED": false
+			}
+		},
+		{
+			"name": "base-lib-shared",
+			"hidden": true,
+			"cacheVariables": {
+				"MARS_BUILD_SHARED": true
+			}
+		},
+		{
+			"name": "linux-static-ninja-debug",
+			"displayName": "Linux Static (Ninja) [Debug]",
+			"description": "Target Linux with a Ninja Multi-Config environment.",
+			"inherits": [
+				"base",
+				"base-os-linux",
+				"base-lib-static",
+				"base-gen-ninja",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "linux-static-ninja-release",
+			"displayName": "Linux Static (Ninja) [Release]",
+			"description": "Target Linux with a Ninja Multi-Config environment.",
+			"inherits": [
+				"base",
+				"base-os-linux",
+				"base-lib-static",
+				"base-gen-ninja",
+				"base-cfg-release"
+			]
+		},
+		{
+			"name": "windows-static-mingw-debug",
+			"displayName": "Windows Static (MSYS MinGW) [Debug]",
+			"description": "Target Windows with an MSYS MinGW environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-mingw",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "windows-static-mingw-release",
+			"displayName": "Windows Static (MSYS MinGW) [Release]",
+			"description": "Target Windows with an MSYS MinGW environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-mingw",
+				"base-cfg-release"
+			]
+		},
+		{
+			"name": "windows-static-clang-debug",
+			"displayName": "Windows Static (MSYS Clang) [Debug]",
+			"description": "Target Windows with an MSYS Clang environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-clang",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "windows-static-clang-release",
+			"displayName": "Windows Static (MSYS Clang) [Release]",
+			"description": "Target Windows with an MSYS Clang environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-clang",
+				"base-cfg-release"
+			]
+		},
+		{
+			"name": "windows-static-msvc2022-debug",
+			"displayName": "Windows Static (MSVC 2022) [Debug]",
+			"description": "Target Windows with a Visual Studio 17 2022 environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-msvc2022"
+			]
+		},
+		{
+			"name": "windows-static-msvc2022-release",
+			"displayName": "Windows Static (MSVC 2022) [Release]",
+			"description": "Target Windows with a Visual Studio 17 2022 environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-static",
+				"base-gen-msvc2022"
+			]
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "windows-static-msvc2022-debug",
+			"displayName": "Windows Static Library (Debug)",
+			"description": "Build with Debug configuration in Visual Studio 17 2022 environment.",
+			"configurePreset": "windows-static-msvc2022-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-static-msvc2022-release",
+			"displayName": "Windows Static Library (Release)",
+			"description": "Build with Release configuration in Visual Studio 17 2022 environment.",
+			"configurePreset": "windows-static-msvc2022-release",
+			"configuration": "Release"
+		},
+		{
+			"name": "windows-static-mingw-debug",
+			"displayName": "Windows Static Library (Debug)",
+			"description": "Build with Debug configuration in an MSYS MinGW environment.",
+			"configurePreset": "windows-static-mingw-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-static-mingw-release",
+			"displayName": "Windows Static Library (Release)",
+			"description": "Build with Release configuration in an MSYS MinGW environment.",
+			"configurePreset": "windows-static-mingw-release",
+			"configuration": "Release"
+		},
+		{
+			"name": "windows-static-clang-debug",
+			"displayName": "Windows Static Library (Debug)",
+			"description": "Build with Debug configuration in an MSYS Clang environment.",
+			"configurePreset": "windows-static-clang-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-static-clang-release",
+			"displayName": "Windows Static Library (Release)",
+			"description": "Build with Release configuration in an MSYS Clang environment.",
+			"configurePreset": "windows-static-clang-release",
+			"configuration": "Release"
+		},
+		{
+			"name": "linux-static-ninja-debug",
+			"displayName": "Linux Static Library (Debug)",
+			"description": "Build with Debug configuration in Ninja environment.",
+			"configurePreset": "linux-static-ninja-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "linux-static-ninja-release",
+			"displayName": "Linux Static Library (Release)",
+			"description": "Build with Release configuration in Ninja environment.",
+			"configurePreset": "linux-static-ninja-release",
+			"configuration": "Release"
+		}
+	]
+}
