@@ -3,13 +3,13 @@
 size_t _deque_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
 	if (c / capacity != element_size) { return 0; }
-	return MARS_MAX(sizeof(deque_t), offsetof(deque_t, _buffer) + c);
+	return umax(sizeof(deque_t), offsetof(deque_t, _buffer) + c);
 }
 
 deque_t* _deque_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _deque_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
-	deque_t* qu = calloc(1, buffer_size);
+	deque_t* qu = MARS_CALLOC(1, buffer_size);
 	if (!qu) { return NULL; }
 	qu->_capacity = capacity;
 	qu->_element_size = element_size;
@@ -20,7 +20,7 @@ deque_t* _deque_resize(deque_t* qu, size_t new_capacity) {
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(qu->_capacity + 1);
-		new_capacity = MARS_MIN(c, DEQUE_MAX_CAPACITY);
+		new_capacity = umin(c, DEQUE_MAX_CAPACITY);
 	}
 	if (new_capacity > DEQUE_MAX_CAPACITY || new_capacity < qu->_length) { return NULL; }
 
@@ -43,7 +43,7 @@ deque_t* _deque_resize(deque_t* qu, size_t new_capacity) {
 	new_qu->_head = 0;
 	new_qu->_tail = qu->_length;
 	new_qu->_length = qu->_length;
-	free(qu);
+	MARS_FREE(qu);
 	return new_qu;
 }
 

@@ -31,7 +31,7 @@ typedef int32_t priority_queue_value_t;
 
 /// @brief Deallocate a priority queue.
 /// @param q Priority queue pointer
-#define priority_queue_destroy(q) free(q)
+#define priority_queue_destroy(q) MARS_FREE(q)
 
 /// @brief Get the top element in the priority queue.
 /// @param q Priority queue pointer

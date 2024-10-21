@@ -110,14 +110,16 @@
 			"name": "base-lib-static",
 			"hidden": true,
 			"cacheVariables": {
-				"MARS_BUILD_SHARED": false
+				"MARS_BUILD_SHARED": false,
+				"MARS_LIB": "static"
 			}
 		},
 		{
 			"name": "base-lib-shared",
 			"hidden": true,
 			"cacheVariables": {
-				"MARS_BUILD_SHARED": true
+				"MARS_BUILD_SHARED": true,
+				"MARS_LIB": "shared"
 			}
 		},
 		{
@@ -140,6 +142,30 @@
 				"base",
 				"base-os-linux",
 				"base-lib-static",
+				"base-gen-ninja",
+				"base-cfg-release"
+			]
+		},
+		{
+			"name": "linux-shared-ninja-debug",
+			"displayName": "Linux Shared (Ninja) [Debug]",
+			"description": "Target Linux with a Ninja Multi-Config environment.",
+			"inherits": [
+				"base",
+				"base-os-linux",
+				"base-lib-shared",
+				"base-gen-ninja",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "linux-shared-ninja-release",
+			"displayName": "Linux Shared (Ninja) [Release]",
+			"description": "Target Linux with a Ninja Multi-Config environment.",
+			"inherits": [
+				"base",
+				"base-os-linux",
+				"base-lib-shared",
 				"base-gen-ninja",
 				"base-cfg-release"
 			]
@@ -169,6 +195,30 @@
 			]
 		},
 		{
+			"name": "windows-shared-mingw-debug",
+			"displayName": "Windows Shared (MSYS MinGW) [Debug]",
+			"description": "Target Windows with an MSYS MinGW environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
+				"base-gen-mingw",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "windows-shared-mingw-release",
+			"displayName": "Windows Shared (MSYS MinGW) [Release]",
+			"description": "Target Windows with an MSYS MinGW environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
+				"base-gen-mingw",
+				"base-cfg-release"
+			]
+		},
+		{
 			"name": "windows-static-clang-debug",
 			"displayName": "Windows Static (MSYS Clang) [Debug]",
 			"description": "Target Windows with an MSYS Clang environment.",
@@ -188,6 +238,30 @@
 				"base",
 				"base-os-windows",
 				"base-lib-static",
+				"base-gen-clang",
+				"base-cfg-release"
+			]
+		},
+		{
+			"name": "windows-shared-clang-debug",
+			"displayName": "Windows Shared (MSYS Clang) [Debug]",
+			"description": "Target Windows with an MSYS Clang environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
+				"base-gen-clang",
+				"base-cfg-debug"
+			]
+		},
+		{
+			"name": "windows-shared-clang-release",
+			"displayName": "Windows Shared (MSYS Clang) [Release]",
+			"description": "Target Windows with an MSYS Clang environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
 				"base-gen-clang",
 				"base-cfg-release"
 			]
@@ -213,6 +287,28 @@
 				"base-lib-static",
 				"base-gen-msvc2022"
 			]
+		},
+		{
+			"name": "windows-shared-msvc2022-debug",
+			"displayName": "Windows Shared (MSVC 2022) [Debug]",
+			"description": "Target Windows with a Visual Studio 17 2022 environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
+				"base-gen-msvc2022"
+			]
+		},
+		{
+			"name": "windows-shared-msvc2022-release",
+			"displayName": "Windows Shared (MSVC 2022) [Release]",
+			"description": "Target Windows with a Visual Studio 17 2022 environment.",
+			"inherits": [
+				"base",
+				"base-os-windows",
+				"base-lib-shared",
+				"base-gen-msvc2022"
+			]
 		}
 	],
 	"buildPresets": [
@@ -231,6 +327,20 @@
 			"configuration": "Release"
 		},
 		{
+			"name": "windows-shared-msvc2022-debug",
+			"displayName": "Windows Shared Library (Debug)",
+			"description": "Build with Debug configuration in Visual Studio 17 2022 environment.",
+			"configurePreset": "windows-shared-msvc2022-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-shared-msvc2022-release",
+			"displayName": "Windows Shared Library (Release)",
+			"description": "Build with Release configuration in Visual Studio 17 2022 environment.",
+			"configurePreset": "windows-shared-msvc2022-release",
+			"configuration": "Release"
+		},
+		{
 			"name": "windows-static-mingw-debug",
 			"displayName": "Windows Static Library (Debug)",
 			"description": "Build with Debug configuration in an MSYS MinGW environment.",
@@ -242,6 +352,20 @@
 			"displayName": "Windows Static Library (Release)",
 			"description": "Build with Release configuration in an MSYS MinGW environment.",
 			"configurePreset": "windows-static-mingw-release",
+			"configuration": "Release"
+		},
+		{
+			"name": "windows-shared-mingw-debug",
+			"displayName": "Windows Shared Library (Debug)",
+			"description": "Build with Debug configuration in an MSYS MinGW environment.",
+			"configurePreset": "windows-shared-mingw-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-shared-mingw-release",
+			"displayName": "Windows Shared Library (Release)",
+			"description": "Build with Release configuration in an MSYS MinGW environment.",
+			"configurePreset": "windows-shared-mingw-release",
 			"configuration": "Release"
 		},
 		{
@@ -259,6 +383,20 @@
 			"configuration": "Release"
 		},
 		{
+			"name": "windows-shared-clang-debug",
+			"displayName": "Windows Shared Library (Debug)",
+			"description": "Build with Debug configuration in an MSYS Clang environment.",
+			"configurePreset": "windows-shared-clang-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "windows-shared-clang-release",
+			"displayName": "Windows Shared Library (Release)",
+			"description": "Build with Release configuration in an MSYS Clang environment.",
+			"configurePreset": "windows-shared-clang-release",
+			"configuration": "Release"
+		},
+		{
 			"name": "linux-static-ninja-debug",
 			"displayName": "Linux Static Library (Debug)",
 			"description": "Build with Debug configuration in Ninja environment.",
@@ -270,6 +408,20 @@
 			"displayName": "Linux Static Library (Release)",
 			"description": "Build with Release configuration in Ninja environment.",
 			"configurePreset": "linux-static-ninja-release",
+			"configuration": "Release"
+		},
+		{
+			"name": "linux-shared-ninja-debug",
+			"displayName": "Linux Shared Library (Debug)",
+			"description": "Build with Debug configuration in Ninja environment.",
+			"configurePreset": "linux-shared-ninja-debug",
+			"configuration": "Debug"
+		},
+		{
+			"name": "linux-shared-ninja-release",
+			"displayName": "Linux Shared Library (Release)",
+			"description": "Build with Release configuration in Ninja environment.",
+			"configurePreset": "linux-shared-ninja-release",
 			"configuration": "Release"
 		}
 	]

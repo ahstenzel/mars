@@ -42,7 +42,7 @@ typedef uint32_t _umap_hash_t;
 
 /// @brief Deallocate an unordered map.
 /// @param u Map pointer
-#define unordered_map_destroy(u) free(u)
+#define unordered_map_destroy(u) MARS_FREE(u)
 
 /// @brief Add a new element to the map if it does not already exist.
 /// @param u Map pointer

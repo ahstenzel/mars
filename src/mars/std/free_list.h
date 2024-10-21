@@ -31,7 +31,7 @@
 
 /// @brief Deallocate a list.
 /// @param l List pointer
-#define free_list_destroy(l) free(l);
+#define free_list_destroy(l) MARS_FREE(l);
 
 /// @brief Get an element from the list.
 /// @param l List pointer

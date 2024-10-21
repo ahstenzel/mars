@@ -2,7 +2,7 @@
 
 size_t _umap_str_node_size(size_t element_size) {
 	size_t key_size = sizeof(_umap_str_key_t);
-	size_t size_max = MARS_MAX(element_size, key_size);
+	size_t size_max = umax(element_size, key_size);
 	return (element_size + key_size + (size_max - 1)) & ~(size_max - 1);
 }
 
@@ -11,13 +11,13 @@ size_t _umap_str_size(size_t element_size, size_t capacity) {
 	size_t c = n * capacity;
 	if (c / capacity != n) { return 0; }
 	if (c > SIZE_MAX - capacity) { return 0; }
-	return MARS_MAX(sizeof(unordered_map_str_t), offsetof(unordered_map_str_t, _buffer) + capacity + c);
+	return umax(sizeof(unordered_map_str_t), offsetof(unordered_map_str_t, _buffer) + capacity + c);
 }
 
 unordered_map_str_t* _umap_str_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _umap_str_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
-	unordered_map_str_t* umap_str = calloc(1, buffer_size);
+	unordered_map_str_t* umap_str = MARS_CALLOC(1, buffer_size);
 	if (!umap_str) { return NULL; }
 	umap_str->_capacity = capacity;
 	umap_str->_element_size = element_size;
@@ -29,7 +29,7 @@ unordered_map_str_t* _umap_str_resize(unordered_map_str_t* umap_str, size_t new_
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(umap_str->_capacity + 1);
-		new_capacity = MARS_MIN(c, UMAP_STR_MAX_CAPACITY);
+		new_capacity = umin(c, UMAP_STR_MAX_CAPACITY);
 	}
 	if (new_capacity > UMAP_STR_MAX_CAPACITY || new_capacity < umap_str->_length) { return NULL; }
 	
@@ -48,7 +48,7 @@ unordered_map_str_t* _umap_str_resize(unordered_map_str_t* umap_str, size_t new_
 	}
 
 	// Return new map
-	free(umap_str);
+	MARS_FREE(umap_str);
 	return new_umap_str;
 }
 
@@ -91,7 +91,7 @@ void* _umap_str_insert(unordered_map_str_t** umap_str, _umap_str_key_t key, void
 		if ((*ctrl) & _UMAP_STR_EMPTY) {
 			// Copy the key to a new buffer
 			size_t dest_size = strlen(key) + 1;
-			_umap_str_key_t dest = malloc(dest_size);
+			_umap_str_key_t dest = MARS_MALLOC(dest_size);
 			if (!dest) { return NULL; }
 			strcpy_s(dest, dest_size, key);
 
@@ -139,7 +139,7 @@ void _umap_str_delete(unordered_map_str_t* umap_str, _umap_str_key_t key) {
 			// Verify key at this pos matches
 			if (strcmp(*_umap_str_node_key(umap_str, pos), key) == 0) {
 				memset(ctrl, _UMAP_STR_DELETED, 1);
-				free(*_umap_str_node_key(umap_str, pos));
+				MARS_FREE(*_umap_str_node_key(umap_str, pos));
 				umap_str->_length--;
 				return;
 			}
@@ -193,14 +193,14 @@ unordered_map_str_it_t* _umap_str_it(unordered_map_str_t* umap_str) {
 
 	// Construct iterator
 	size_t buffer_size = sizeof(unordered_map_str_it_t);
-	unordered_map_str_it_t* it = malloc(buffer_size);
+	unordered_map_str_it_t* it = MARS_MALLOC(buffer_size);
 	if (!it) { return NULL; }
 	memset(it, 0, buffer_size);
 	it->_index = SIZE_MAX;
 	it->_umap_str = umap_str;
 	
 	// Find first valid entry in map
-	_umap_str_it_next(&it);
+	it = _umap_str_it_next(it);
 	return it;
 }
 
@@ -230,7 +230,7 @@ unordered_map_str_it_t* _umap_str_it_next(unordered_map_str_it_t* it) {
 		}
 	} while(1);
 
-	free(it);
+	MARS_FREE(it);
 	return NULL;
 }
 
@@ -242,10 +242,10 @@ void _umap_str_destroy(unordered_map_str_t* umap_str) {
 	for(size_t i = 0; i<umap_str->_capacity; ++i) {
 		uint8_t* ctrl = _umap_str_ctrl(umap_str, i);
 		if (!(*ctrl & _UMAP_STR_EMPTY)) {
-			free(*_umap_str_node_key(umap_str, i));
+			MARS_FREE(*_umap_str_node_key(umap_str, i));
 		}
 	}
 
 	// Deallocate buffer
-	free(umap_str);
+	MARS_FREE(umap_str);
 }

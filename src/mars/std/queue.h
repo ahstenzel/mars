@@ -27,7 +27,7 @@
 
 /// @brief Deallocate a queue.
 /// @param q Queue pointer
-#define queue_destroy(q) free(q)
+#define queue_destroy(q) MARS_FREE(q)
 
 /// @brief Get the front element of the queue.
 /// @param q Queue pointer

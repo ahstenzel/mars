@@ -5,13 +5,13 @@ size_t _priority_queue_size(size_t element_size, size_t capacity) {
 	if (c / capacity != element_size) { return 0; }
 	size_t o = sizeof(priority_queue_value_t) * capacity;
 	if (c > SIZE_MAX - o) { return 0; }
-	return MARS_MAX(sizeof(priority_queue_t), offsetof(priority_queue_t, _buffer) + o + c);
+	return umax(sizeof(priority_queue_t), offsetof(priority_queue_t, _buffer) + o + c);
 }
 
 priority_queue_t* _priority_queue_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _priority_queue_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
-	priority_queue_t* qu = calloc(1, buffer_size);
+	priority_queue_t* qu = MARS_CALLOC(1, buffer_size);
 	if (!qu) { return NULL; }
 	qu->_capacity = capacity;
 	qu->_element_size = element_size;
@@ -22,7 +22,7 @@ priority_queue_t* _priority_queue_resize(priority_queue_t* qu, size_t new_capaci
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(qu->_capacity + 1);
-		new_capacity = MARS_MIN(c, PRIORITY_QUEUE_MAX_CAPACITY);
+		new_capacity = umin(c, PRIORITY_QUEUE_MAX_CAPACITY);
 	}
 	if (new_capacity > PRIORITY_QUEUE_MAX_CAPACITY || new_capacity < qu->_length) { return NULL; }
 
@@ -35,7 +35,7 @@ priority_queue_t* _priority_queue_resize(priority_queue_t* qu, size_t new_capaci
 	memcpy_s(_priority_queue_data_pos(new_qu, 0), data_dest_size, _priority_queue_data_pos(qu, 0), data_dest_size);
 
 	new_qu->_length = qu->_length;
-	free(qu);
+	MARS_FREE(qu);
 	_priority_queue_sort(new_qu);
 	return new_qu;
 }
@@ -103,7 +103,7 @@ void _priority_queue_sort(priority_queue_t* qu) {
 	// Insertion sort
 	size_t dest_elem_size = qu->_element_size;
 	size_t dest_value_size = sizeof(priority_queue_value_t);
-	void* tmp_data = malloc(qu->_element_size);
+	void* tmp_data = MARS_MALLOC(qu->_element_size);
 	priority_queue_value_t tmp_value = 0;
 	for(size_t i=1; i<qu->_length; ++i) {
 		// Copy element to temp buffer
@@ -122,7 +122,7 @@ void _priority_queue_sort(priority_queue_t* qu) {
 		memcpy_s(_priority_queue_value_pos(qu, j), dest_value_size, &tmp_value, dest_value_size);
 	}
 	// Free temp buffer
-	free(tmp_data);
+	MARS_FREE(tmp_data);
 }
 
 size_t _priority_queue_find_index(priority_queue_t* qu, priority_queue_value_t value, void* data) {
@@ -190,7 +190,7 @@ priority_queue_it_t* _priority_queue_it(priority_queue_t* qu, bool begin) {
 
 	// Construct iterator
 	size_t buffer_size = sizeof(priority_queue_it_t);
-	priority_queue_it_t* it = calloc(1, buffer_size);
+	priority_queue_it_t* it = MARS_CALLOC(1, buffer_size);
 	if (!it) { return NULL; }
 
 	// Find first valid entry in map
@@ -209,11 +209,11 @@ priority_queue_it_t* _priority_queue_it_value(priority_queue_t* qu, priority_que
 
 	// Construct iterator
 	size_t buffer_size = sizeof(priority_queue_it_t);
-	priority_queue_it_t* it = calloc(1, buffer_size);
+	priority_queue_it_t* it = MARS_CALLOC(1, buffer_size);
 	if (!it) { return NULL; }
 	it->_index = _priority_queue_find_index(qu, value, NULL);
 	if (it->_index == qu->_capacity) {
-		free(it);
+		MARS_FREE(it);
 		return NULL;
 	}
 	it->_qu = qu;
@@ -235,7 +235,7 @@ priority_queue_it_t* _priority_queue_it_next(priority_queue_it_t* it) {
 	}
 	else {
 		// End reached, invalidate iterator
-		free(it);
+		MARS_FREE(it);
 		return NULL;
 	}
 }
@@ -255,7 +255,7 @@ priority_queue_it_t* _priority_queue_it_prev(priority_queue_it_t* it) {
 	}
 	else {
 		// End reached, invalidate iterator
-		free(it);
+		MARS_FREE(it);
 		return NULL;
 	}
 }

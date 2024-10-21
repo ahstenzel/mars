@@ -4,14 +4,14 @@ size_t _free_list_buffer_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
 	if (c / capacity != element_size) { return 0; }
 	size_t o = ((capacity/8)+1);
-	return MARS_MAX(sizeof(free_list_t), offsetof(free_list_t, _buffer) + c + o);
+	return umax(sizeof(free_list_t), offsetof(free_list_t, _buffer) + c + o);
 }
 
 free_list_t* _free_list_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _free_list_buffer_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	//size_t object_size = offsetof(free_list_t, _buffer) + ((capacity/8)+1) + buffer_size;
-	free_list_t* list = calloc(buffer_size, 1);
+	free_list_t* list = MARS_CALLOC(buffer_size, 1);
 	if (!list) { return NULL; }
 	list->_capacity = capacity;
 	list->_element_size = element_size;
@@ -22,7 +22,7 @@ free_list_t* _free_list_resize(free_list_t* list, size_t new_capacity) {
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(list->_capacity + 1);
-		new_capacity = MARS_MIN(c, FREE_LIST_MAX_CAPACITY);
+		new_capacity = umin(c, FREE_LIST_MAX_CAPACITY);
 	}
 	if (new_capacity > FREE_LIST_MAX_CAPACITY) { return NULL; }
 
@@ -40,7 +40,7 @@ free_list_t* _free_list_resize(free_list_t* list, size_t new_capacity) {
 
 	new_list->_length = list->_length;
 	new_list->_next_free = list->_next_free;
-	free(list);
+	MARS_FREE(list);
 	return new_list;
 }
 
@@ -86,7 +86,7 @@ void _free_list_remove(free_list_t* list, size_t index, size_t count) {
 	if ((index + count) > list->_length) { return; }
 
 	// Flag spot as free
-	list->_next_free = MARS_MIN(list->_next_free, index);
+	list->_next_free = umin(list->_next_free, index);
 	for(size_t i=0; i<count; ++i) {
 		_free_list_bit_clr(list, index+i);
 	}
@@ -101,13 +101,13 @@ free_list_it_t* _free_list_it(free_list_t* list) {
 
 	// Construct iterator
 	size_t buffer_size = sizeof(free_list_it_t);
-	free_list_it_t* it = calloc(buffer_size, 1);
+	free_list_it_t* it = MARS_CALLOC(buffer_size, 1);
 	if (!it) { return NULL; }
 	it->index = SIZE_MAX;
 	it->_list = list;
 
 	// Find first valid entry in list
-	_free_list_it_next(&it);
+	it = _free_list_it_next(it);
 	return it;
 }
 
@@ -133,6 +133,6 @@ free_list_it_t* _free_list_it_next(free_list_it_t* it) {
 		}
 	} while(1);
 
-	free(it);
+	MARS_FREE(it);
 	return NULL;
 }

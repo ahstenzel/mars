@@ -12,3 +12,5 @@ _deps
 
 out/
 bin/
+build/
+.vscode/

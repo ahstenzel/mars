@@ -74,11 +74,14 @@ void _mars_dbg_log_write(const unsigned char level, const char* func, char* fmt,
 // Code definitions
 #define MARS_RETURN_OK						0		// Return code for successful execution.
 #define MARS_RETURN_CRITICAL_ERROR			1		// Return code for an unhandled critical error.
-#define MARS_RETURN_INVALID_REFERENCE		2		// Return code for an invalid pointer.
-#define MARS_RETURN_INVALID_ID				3		// Return code for an invalid unique ID.
-#define MARS_RETURN_INVALID_PARAMETER		4		// Return code for an improperly formatted function parameter.
-#define MARS_RETURN_CONTAINER_FAILURE		5		// Return code for an internal failure in data containers.
-#define MARS_RETURN_RESOURCE_FAILURE		6		// Return code for an internal failure in the resource management system.
+#define MARS_RETURN_GENERIC_ERROR			2		// Return code for an unspecified error.
+#define MARS_RETURN_INVALID_REFERENCE		3		// Return code for an invalid pointer.
+#define MARS_RETURN_INVALID_ID				4		// Return code for an invalid unique ID.
+#define MARS_RETURN_INVALID_PARAMETER		5		// Return code for an improperly formatted function parameter.
+#define MARS_RETURN_CONTAINER_FAILURE		6		// Return code for an internal failure in data containers.
+#define MARS_RETURN_RESOURCE_FAILURE		7		// Return code for an internal failure in the resource management system.
+#define MARS_RETURN_VULKAN_FAILURE			8		// Return code for an error in a vulkan internal function.
+#define MARS_RETURN_FILESYSTEM_FAILURE		9		// Return code for a filesystem related error.
 
 // Global variables
 extern unsigned int _mars_g_return_code;	// Last recorded function return code.

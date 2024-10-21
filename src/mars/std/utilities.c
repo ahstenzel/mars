@@ -1,8 +1,26 @@
 #include "mars/std/utilities.h"
 
+// Define custom allocators for inih
+
+void* ini_malloc(size_t size) {
+    return MARS_MALLOC(size);
+}
+
+void ini_free(void* ptr) {
+    MARS_FREE(ptr);
+}
+
+void* ini_realloc(void* ptr, size_t size) {
+    return MARS_REALLOC(ptr, size);
+}
+
 extern int32_t imin(int32_t x, int32_t y);
 
 extern int32_t imax(int32_t x, int32_t y);
+
+extern size_t umin(size_t x, size_t y);
+
+extern size_t umax(size_t x, size_t y);
 
 bool fequal(float a, float b) {
 	// Pure equality shortcut
@@ -11,7 +29,7 @@ bool fequal(float a, float b) {
 	}
 	
 	// Use a fixed epsilon to catch values close to zero
-	float fDiff = fabs(a - b);
+	float fDiff = fabsf(a - b);
 	if (fDiff < MARS_FEQUAL_MAX_DIFF) {
 		return true;
 	}

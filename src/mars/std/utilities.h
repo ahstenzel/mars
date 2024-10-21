@@ -5,10 +5,31 @@
  * Useful global utility functions.
 */
 #include "mars/std/platform.h"
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
 #include <float.h>
+
+//----------------------------------------------------------------------------------
+// Memory allocations
+//----------------------------------------------------------------------------------
+
+#ifndef MARS_MALLOC
+#define MARS_MALLOC malloc
+#endif
+
+#ifndef MARS_CALLOC
+#define MARS_CALLOC calloc
+#endif
+
+#ifndef MARS_REALLOC
+#define MARS_REALLOC realloc
+#endif
+
+#ifndef MARS_FREE
+#define MARS_FREE free
+#endif
 
 //----------------------------------------------------------------------------------
 // Constant definitions
@@ -82,6 +103,10 @@ typedef uint16_t Angle;	// Angle units stored as BAM (Binary angular measurement
 MARS_API inline int32_t imin(int32_t x, int32_t y) { return (x < y) ? x : y; }
 
 MARS_API inline int32_t imax(int32_t x, int32_t y) { return (x > y) ? x : y; }
+
+MARS_API inline size_t umin(size_t x, size_t y) { return (x < y) ? x : y; }
+
+MARS_API inline size_t umax(size_t x, size_t y) { return (x > y) ? x : y; }
 
 
 //----------------------------------------------------------------------------------

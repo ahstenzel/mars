@@ -2,7 +2,7 @@
 
 size_t _umap_node_size(size_t element_size) {
 	size_t key_size = sizeof(_umap_key_t);
-	size_t size_max = MARS_MAX(element_size, key_size);
+	size_t size_max = umax(element_size, key_size);
 	return (element_size + key_size + (size_max - 1)) & ~(size_max - 1);
 }
 
@@ -11,13 +11,13 @@ size_t _umap_size(size_t element_size, size_t capacity) {
 	size_t c = n * capacity;
 	if (c / capacity != n) { return 0; }
 	if (c > SIZE_MAX - capacity) { return 0; }
-	return MARS_MAX(sizeof(unordered_map_t), offsetof(unordered_map_t, _buffer) + capacity + c);
+	return umax(sizeof(unordered_map_t), offsetof(unordered_map_t, _buffer) + capacity + c);
 }
 
 unordered_map_t* _umap_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _umap_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
-	unordered_map_t* umap = calloc(1, buffer_size);
+	unordered_map_t* umap = MARS_CALLOC(1, buffer_size);
 	if (!umap) { return NULL; }
 	umap->_capacity = capacity;
 	umap->_element_size = element_size;
@@ -29,7 +29,7 @@ unordered_map_t* _umap_resize(unordered_map_t* umap, size_t new_capacity) {
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(umap->_capacity + 1);
-		new_capacity = MARS_MIN(c, UMAP_MAX_CAPACITY);
+		new_capacity = umin(c, UMAP_MAX_CAPACITY);
 	}
 	if (new_capacity > UMAP_MAX_CAPACITY || new_capacity < umap->_length) { return NULL; }
 
@@ -48,7 +48,7 @@ unordered_map_t* _umap_resize(unordered_map_t* umap, size_t new_capacity) {
 	}
 
 	// Return new map
-	free(umap);
+	MARS_FREE(umap);
 	return new_umap;
 }
 
@@ -183,13 +183,13 @@ unordered_map_it_t* _umap_it(unordered_map_t* umap) {
 
 	// Construct iterator
 	size_t buffer_size = sizeof(unordered_map_it_t);
-	unordered_map_it_t* it = calloc(1, buffer_size);
+	unordered_map_it_t* it = MARS_CALLOC(1, buffer_size);
 	if (!it) { return NULL; }
 	it->_index = SIZE_MAX;
 	it->_umap = umap;
 	
 	// Find first valid entry in map
-	_umap_it_next(&it);
+	it = _umap_it_next(it);
 	return it;
 }
 
@@ -219,6 +219,6 @@ unordered_map_it_t* _umap_it_next(unordered_map_it_t* it) {
 		}
 	} while(1);
 
-	free(it);
+	MARS_FREE(it);
 	return NULL;
 }

@@ -33,7 +33,7 @@
 
 /// @brief Deallocate a vector.
 /// @param v Vector pointer
-#define vector_destroy(v) free(v)
+#define vector_destroy(v) MARS_FREE(v)
 
 /// @brief Get an element from the vector.
 /// @param v Vector pointer

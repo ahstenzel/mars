@@ -27,7 +27,7 @@
 
 /// @brief Deallocate a stack.
 /// @param s Stack pointer
-#define stack_destroy(s) free(s)
+#define stack_destroy(s) MARS_FREE(s)
 
 /// @brief Get the top element of the stack.
 /// @param s Stack pointer

@@ -3,13 +3,13 @@
 size_t _stack_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
 	if (c / capacity != element_size) { return 0; }
-	return MARS_MAX(sizeof(stack_t), offsetof(stack_t, _buffer) + c);
+	return umax(sizeof(stack_t), offsetof(stack_t, _buffer) + c);
 }
 
 stack_t* _stack_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _stack_size(element_size, capacity); 
 	if (buffer_size == 0) { return NULL; }
-	stack_t* stk = calloc(1, buffer_size);
+	stack_t* stk = MARS_CALLOC(1, buffer_size);
 	if (!stk) { return NULL; }
 	stk->_capacity = capacity;
 	stk->_element_size = element_size;
@@ -20,7 +20,7 @@ stack_t* _stack_resize(stack_t* stk, size_t new_capacity) {
 	// Calculate new capacity
 	if (new_capacity == 0) {
 		size_t c = MARS_NEXT_POW2(stk->_capacity + 1);
-		new_capacity = MARS_MIN(c, STACK_MAX_CAPACITY);
+		new_capacity = umin(c, STACK_MAX_CAPACITY);
 	}
 	if (new_capacity > STACK_MAX_CAPACITY || new_capacity < stk->_length) { return NULL; }
 
@@ -30,7 +30,7 @@ stack_t* _stack_resize(stack_t* stk, size_t new_capacity) {
 	size_t dest_size = stk->_length * stk->_element_size;
 	memcpy_s(new_stk->_buffer, dest_size, stk->_buffer, dest_size);
 	new_stk->_length = stk->_length;
-	free(stk);
+	MARS_FREE(stk);
 	return new_stk;
 }
 
