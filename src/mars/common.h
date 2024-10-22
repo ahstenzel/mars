@@ -20,10 +20,8 @@
 #include <math.h>
 #include <memory.h>
 
-// OS includes
-#include "mars/std/platform.h"
-
 // Mars includes
+#include "mars/std/platform.h"
 #include "mars/std/debug.h"
 #include "mars/std/deque.h"
 #include "mars/std/free_list.h"
@@ -42,6 +40,6 @@
 #include "external/inih/ini.h"
 #define GLFW_INCLUDE_VULKAN
 #include "external/GLFW/glfw3.h"
-#include <shaderc/shaderc.h>
+//#include <shaderc/shaderc.h>
 
 #endif // MARS_COMMON_H

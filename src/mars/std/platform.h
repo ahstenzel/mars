@@ -123,9 +123,17 @@
 
 // Inline specifier
 #if !defined(MARS_DISABLE_INLINE) && !defined(MARS_CMP_MSVC)
-	#define MARS_INLINE inline
-#else
-	#define MARS_INLINE
+	#define MARS_USE_INLINE
 #endif
+//#define MARS_USE_INLINE
+
+// Render backend
+#define MARS_RENDERER_BACKEND_DEFAULT		0
+#define MARS_RENDERER_BACKEND_VULKAN		1
+#define MARS_RENDERER_BACKEND_DX12			2
+#if !defined(MARS_OS_WINDOWS)
+	#define MARS_DISABLE_RENDERER_DX12
+#endif
+#define MARS_DISABLE_RENDERER_DX12
 
 #endif // MARS_STD_PLATFORM_H

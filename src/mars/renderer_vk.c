@@ -1,6 +1,202 @@
-#include "mars/renderer.h"
+#include "mars/renderer_vk.h"
+#include "mars/shader.h"
 
-VkInstance _RenderCreateInstance() {
+#define MARS_PHYSICAL_DEVICE(w) ((w)->_physicalDevices[(w)->_physicalDeviceIdx])
+
+RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
+	MARS_RETURN_CLEAR;
+	RendererVulkan* renderer = NULL;
+	char* vertexShaderCode = NULL;
+	char* fragmentShaderCode = NULL;
+
+	// Allocate renderer
+	renderer = MARS_CALLOC(1, sizeof(*renderer));
+	if (!renderer) {
+		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate renderer structure!");
+		goto renderer_vk_create_fail;
+	}
+
+	// Initialize Vulkan
+	MARS_DEBUG_LOG("Initializing Vulkan");
+	renderer->_instance = _RendererVKCreateInstance();
+	if (MARS_RETURN != MARS_RETURN_OK) {
+		MARS_DEBUG_WARN("Failed to initalize render backend!");
+		goto renderer_vk_create_fail;
+	}
+
+	// Create physical device
+	MARS_DEBUG_LOG("Creating physical device");
+	renderer->_numPhysicalDevices = _RendererVKGetPhysicalDeviceNumber(&renderer->_instance);
+	renderer->_physicalDevices = _RendererVKGetPhysicalDevices(&renderer->_instance, renderer->_numPhysicalDevices);
+	renderer->_physicalDeviceIdx = _RendererVKGetBestPhysicalDeviceIndex(renderer->_physicalDevices, renderer->_numPhysicalDevices);
+
+	// Create render queue
+	MARS_DEBUG_LOG("Creating render queue");
+	uint32_t numQueueFamily = _RendererVKGetQueueFamilyNumber(&MARS_PHYSICAL_DEVICE(renderer));
+	VkQueueFamilyProperties* queueFamilyProperties = _RendererVKGetQueueFamilyProperties(&MARS_PHYSICAL_DEVICE(renderer), numQueueFamily);
+	renderer->_device = _RendererVKCreateDevice(&MARS_PHYSICAL_DEVICE(renderer), numQueueFamily, queueFamilyProperties);
+	uint32_t bestGraphicsQueueFamilyIndex = _RendererVKGetBestGraphicsQueueFamilyIndex(queueFamilyProperties, numQueueFamily);
+	renderer->_graphicsQueueMode = _RendererVKGetGraphicsQueueMode(queueFamilyProperties, bestGraphicsQueueFamilyIndex);
+	renderer->_drawingQueue = _RendererVKGetDrawingQueue(&renderer->_device, bestGraphicsQueueFamilyIndex);
+	renderer->_presentingQueue = _RendererVKGetPresentingQueue(&renderer->_device, bestGraphicsQueueFamilyIndex, renderer->_graphicsQueueMode);
+	_RendererVKDestroyQueueFamilyProperties(&queueFamilyProperties);
+
+	// Create surface
+	MARS_DEBUG_LOG("Create surface");
+	renderer->_surface = _RendererVKCreateSurface(_window, &renderer->_instance);
+	VkBool32 surfaceSupported = _RendererVKGetSurfaceSupport(&renderer->_surface, &MARS_PHYSICAL_DEVICE(renderer), bestGraphicsQueueFamilyIndex);
+	if (!surfaceSupported) {
+		MARS_DEBUG_WARN("Failed to create swapchain!");
+		goto renderer_vk_create_fail;
+	}
+	
+	// Create swapchain
+	MARS_DEBUG_LOG("Creating swapchain");
+	VkSurfaceCapabilitiesKHR surfaceCapabilities = _RendererVKGetSurfaceCapabilities(&renderer->_surface, &MARS_PHYSICAL_DEVICE(renderer));
+	VkSurfaceFormatKHR bestSurfaceFormat = _RendererVKGetBestSurfaceFormat(&renderer->_surface, &MARS_PHYSICAL_DEVICE(renderer));
+	VkPresentModeKHR bestPresentMode = _RendererVKGetBestPresentMode(&renderer->_surface, &MARS_PHYSICAL_DEVICE(renderer));
+	VkExtent2D bestSwapchainExtent = _RendererVKGetBestSwapchainExtent(&surfaceCapabilities, _window);
+	uint32_t imageArrayLayers = 1;
+	renderer->_swapchain = _RendererVKCreateSwapchain(&renderer->_device, &renderer->_surface, &surfaceCapabilities, &bestSurfaceFormat, &bestSwapchainExtent, &bestPresentMode, imageArrayLayers, renderer->_graphicsQueueMode);
+	renderer->_numSwapchainImages = _RendererVKGetSwapchainImageNumber(&renderer->_device, &renderer->_swapchain);
+	renderer->_swapchainImages = _RendererVKGetSwapchainImages(&renderer->_device, &renderer->_swapchain, renderer->_numSwapchainImages);
+	renderer->_swapchainImageViews = _RendererVKCreateImageViews(&renderer->_device, &renderer->_swapchainImages, &bestSurfaceFormat, renderer->_numSwapchainImages, imageArrayLayers);
+
+	// Create framebuffers
+	MARS_DEBUG_LOG("Creating framebuffer");
+	renderer->_renderPass = _RendererVKCreateRenderPass(&renderer->_device, &bestSurfaceFormat);
+	renderer->_framebuffers = _RendererVKCreateFramebuffers(&renderer->_device, &renderer->_renderPass, &bestSwapchainExtent, &renderer->_swapchainImageViews, renderer->_numSwapchainImages);
+
+	// Create shader pipelines
+	MARS_DEBUG_LOG("Creating default vertex shader module");
+	size_t vertexShaderSize = base64Decode(_SHADER_BIN_DEFAULT_VERT_SPV, NULL, 0);
+	MARS_DEBUG_LOG("Vertex shader binary size: %d", vertexShaderSize);
+	vertexShaderCode = MARS_MALLOC(vertexShaderSize);
+	if (!vertexShaderCode) {
+		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate default vertex shader code buffer!");
+		goto renderer_vk_create_fail;
+	}
+	if (base64Decode(_SHADER_BIN_DEFAULT_VERT_SPV, vertexShaderCode, vertexShaderSize) != vertexShaderSize) {
+		MARS_DEBUG_WARN("Failed to decode vertex shader code!");
+		MARS_RETURN_SET(MARS_RETURN_GENERIC_ERROR);
+		goto renderer_vk_create_fail;
+	}
+	VkShaderModule vertexShaderModule = _RendererVKCreateShaderModule(&renderer->_device, vertexShaderCode, (uint32_t)vertexShaderSize);
+	MARS_FREE(vertexShaderCode);
+	vertexShaderCode = NULL;
+
+	MARS_DEBUG_LOG("Creating default fragment shader module");
+	size_t fragmentShaderSize = base64Decode(_SHADER_BIN_DEFAULT_FRAG_SPV, NULL, 0);
+	fragmentShaderCode = MARS_MALLOC(fragmentShaderSize);
+	if (!fragmentShaderCode) {
+		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate default fragment shader code buffer!");
+		goto renderer_vk_create_fail;
+	}
+	if (base64Decode(_SHADER_BIN_DEFAULT_FRAG_SPV, fragmentShaderCode, fragmentShaderSize) != fragmentShaderSize) {
+		MARS_DEBUG_WARN("Failed to decode fragment shader code!");
+		MARS_RETURN_SET(MARS_RETURN_GENERIC_ERROR);
+		goto renderer_vk_create_fail;
+	}
+	VkShaderModule fragmentShaderModule = _RendererVKCreateShaderModule(&renderer->_device, fragmentShaderCode, (uint32_t)fragmentShaderSize);
+	MARS_FREE(fragmentShaderCode);
+	fragmentShaderCode = NULL;
+
+	MARS_DEBUG_LOG("Creating default shader pipeline");
+	renderer->_pipelineLayout = _RendererVKCreatePipelineLayout(&renderer->_device);
+	renderer->_graphicsPipeline = _RendererVKCreateGraphicsPipeline(&renderer->_device, &renderer->_pipelineLayout, &vertexShaderModule, &fragmentShaderModule, &renderer->_renderPass, &bestSwapchainExtent);
+	_RendererVKDestroyShaderModule(&renderer->_device, &fragmentShaderModule);
+	_RendererVKDestroyShaderCode(&fragmentShaderCode);
+	_RendererVKDestroyShaderModule(&renderer->_device, &vertexShaderModule);
+	_RendererVKDestroyShaderCode(&vertexShaderCode);
+
+	// Create command buffers
+	MARS_DEBUG_LOG("Creating command buffers");
+	renderer->_commandPool = _RendererVKCreateCommandPool(&renderer->_device, bestGraphicsQueueFamilyIndex);
+	renderer->_commandBuffers = _RendererVKCreateCommandBuffers(&renderer->_device, &renderer->_commandPool, renderer->_numSwapchainImages);
+	_RendererVKRecordCommandBuffers(&renderer->_commandBuffers, &renderer->_renderPass, &renderer->_framebuffers, &bestSwapchainExtent, &renderer->_graphicsPipeline, renderer->_numSwapchainImages);
+
+	// Create semaphores
+	MARS_DEBUG_LOG("Creating semaphores");
+	renderer->_maxFrames = 2;
+	renderer->_waitSemaphores = _RendererVKCreateSemaphores(&renderer->_device, renderer->_maxFrames);
+	renderer->_signalSemaphores = _RendererVKCreateSemaphores(&renderer->_device, renderer->_maxFrames);
+	renderer->_frontFences = _RendererVKCreateFences(&renderer->_device, renderer->_maxFrames);
+	renderer->_backFences = _RendererVKCreateEmptyFences(renderer->_numSwapchainImages);
+
+	return renderer;
+renderer_vk_create_fail:
+	_RendererVKDestroy(renderer);
+	if (vertexShaderCode) { free(vertexShaderCode); }
+	if (fragmentShaderCode) { free(fragmentShaderCode); }
+	return NULL;
+}
+
+void _RendererVKDestroy(RendererVulkan* _renderer) {
+	if (_renderer) {
+		vkDeviceWaitIdle(_renderer->_device);
+		_RendererVKDestroyEmptyFences(&_renderer->_backFences);
+		_RendererVKDestroyFences(&_renderer->_device, &_renderer->_frontFences, _renderer->_maxFrames);
+		_RendererVKDestroySemaphores(&_renderer->_device, &_renderer->_signalSemaphores, _renderer->_maxFrames);
+		_RendererVKDestroySemaphores(&_renderer->_device, &_renderer->_waitSemaphores, _renderer->_maxFrames);
+		_RendererVKDestroyCommandBuffers(&_renderer->_device, &_renderer->_commandBuffers, &_renderer->_commandPool, _renderer->_numSwapchainImages);
+		_RendererVKDestroyCommandPool(&_renderer->_device, &_renderer->_commandPool);
+		_RendererVKDestroyGraphicsPipeline(&_renderer->_device, &_renderer->_graphicsPipeline);
+		_RendererVKDestroyPipelineLayout(&_renderer->_device, &_renderer->_pipelineLayout);
+		_RendererVKDestroyFramebuffers(&_renderer->_device, &_renderer->_framebuffers, _renderer->_numSwapchainImages);
+		_RendererVKDestroyRenderPass(&_renderer->_device, &_renderer->_renderPass);
+		_RendererVKDestroyImageViews(&_renderer->_device, &_renderer->_swapchainImageViews, _renderer->_numSwapchainImages);
+		_RendererVKDestroySwapchainImages(&_renderer->_swapchainImages);
+		_RendererVKDestroySwapchain(&_renderer->_device, &_renderer->_swapchain);
+		_RendererVKDestroySurface(&_renderer->_surface, &_renderer->_instance);
+		_RendererVKDestroyDevice(&_renderer->_device);
+		_RendererVKDestroyPhysicalDevices(&_renderer->_physicalDevices);
+		_RendererVKDestroyInstance(&_renderer->_instance);
+	}
+}
+
+void _RendererVKUpdate(RendererVulkan* _renderer) {
+	// Wait to acquire next image from the swapchain
+	static uint32_t currentFrame = 0;
+	vkWaitForFences(_renderer->_device, 1, &_renderer->_frontFences[currentFrame], VK_TRUE, UINT64_MAX);
+	uint32_t imageIndex = 0;
+	vkAcquireNextImageKHR(_renderer->_device, _renderer->_swapchain, UINT64_MAX, _renderer->_waitSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	if (_renderer->_backFences[imageIndex] != VK_NULL_HANDLE) {
+		vkWaitForFences(_renderer->_device, 1, &_renderer->_backFences[imageIndex], VK_TRUE, UINT64_MAX);
+	}
+	_renderer->_backFences[imageIndex] = _renderer->_frontFences[currentFrame];
+
+	// Submit commands to draw queue
+	VkPipelineStageFlags pipelineStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	VkSubmitInfo submitInfo = {
+		VK_STRUCTURE_TYPE_SUBMIT_INFO,
+		VK_NULL_HANDLE,
+		1,
+		&_renderer->_waitSemaphores[currentFrame],
+		&pipelineStage,
+		1,
+		&_renderer->_commandBuffers[imageIndex],
+		1,
+		&_renderer->_signalSemaphores[currentFrame]
+	};
+	vkResetFences(_renderer->_device, 1, &_renderer->_frontFences[currentFrame]);
+	vkQueueSubmit(_renderer->_drawingQueue, 1, &submitInfo, _renderer->_frontFences[currentFrame]);
+
+	// Present next image
+	VkPresentInfoKHR presentInfo = {
+		VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+		VK_NULL_HANDLE,
+		1,
+		&_renderer->_signalSemaphores[currentFrame],
+		1,
+		&_renderer->_swapchain,
+		&imageIndex,
+		VK_NULL_HANDLE
+	};
+	vkQueuePresentKHR(_renderer->_presentingQueue, &presentInfo);
+	currentFrame = (currentFrame + 1) % _renderer->_maxFrames;
+}
+
+VkInstance _RendererVKCreateInstance() {
 	MARS_RETURN_CLEAR;
 
 	// Define application parameters
@@ -42,13 +238,13 @@ VkInstance _RenderCreateInstance() {
 	return instance;
 }
 
-void _RenderDestroyInstance(VkInstance* _instance) {
+void _RendererVKDestroyInstance(VkInstance* _instance) {
 	if (_instance) {
 		vkDestroyInstance(*_instance, VK_NULL_HANDLE);
 	}
 }
 
-VkDevice _RenderCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _numQueueFamily, VkQueueFamilyProperties* _queueFamilyProperties) {
+VkDevice _RendererVKCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _numQueueFamily, VkQueueFamilyProperties* _queueFamilyProperties) {
 	MARS_RETURN_CLEAR;
 	float** queuePriorities = NULL;
 	VkDeviceQueueCreateInfo* deviceQueueCreateInfo = NULL;
@@ -58,30 +254,30 @@ VkDevice _RenderCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _numQue
 	if (!_physicalDevice) {
 		MARS_DEBUG_WARN("Invalid physical device reference!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_create_device_fail;
+		goto renderer_vk_create_device_fail;
 	}
 	if (!_queueFamilyProperties) {
 		MARS_DEBUG_WARN("Invalid queue device properties reference!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_create_device_fail;
+		goto renderer_vk_create_device_fail;
 	}
 
 	// Populate creation info structs
 	queuePriorities = MARS_MALLOC(_numQueueFamily * sizeof(*queuePriorities));
 	if (!queuePriorities) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue priorities double buffer!");
-		goto render_create_device_fail;
+		goto renderer_vk_create_device_fail;
 	}
 	deviceQueueCreateInfo = MARS_MALLOC(_numQueueFamily * sizeof(*deviceQueueCreateInfo));
 	if (!deviceQueueCreateInfo) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue creation info buffer!");
-		goto render_create_device_fail;
+		goto renderer_vk_create_device_fail;
 	}
 	for(uint32_t i=0; i<_numQueueFamily; ++i) {
 		queuePriorities[i] = MARS_MALLOC(_queueFamilyProperties[i].queueCount * sizeof(*queuePriorities[i]));
 		if (!queuePriorities[i]) {
 			MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue priorities buffer (%d)!", (int)i);
-			goto render_create_device_fail;
+			goto renderer_vk_create_device_fail;
 		}
 		for(uint32_t j=0; j<_queueFamilyProperties[i].queueCount; ++j) {
 			queuePriorities[i][j] = 1.f;
@@ -120,10 +316,10 @@ VkDevice _RenderCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _numQue
 	if ((res = vkCreateDevice(*_physicalDevice, &deviceCreateInfo, VK_NULL_HANDLE, &device)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating device! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_create_device_fail;
+		goto renderer_vk_create_device_fail;
 	}
 
-render_create_device_fail:
+renderer_vk_create_device_fail:
 	if (queuePriorities) {
 		for(uint32_t i = 0; i < _numQueueFamily; ++i) {
 			MARS_FREE(queuePriorities[i]);
@@ -134,13 +330,13 @@ render_create_device_fail:
 	return device;
 }
 
-void _RenderDestroyDevice(VkDevice* _device) {
+void _RendererVKDestroyDevice(VkDevice* _device) {
 	if (_device) {
 		vkDestroyDevice(*_device, VK_NULL_HANDLE);
 	}
 }
 
-uint32_t _RenderGetPhysicalDeviceNumber(VkInstance* _instance) {
+uint32_t _RendererVKGetPhysicalDeviceNumber(VkInstance* _instance) {
 	MARS_RETURN_CLEAR;
 
 	// Error check
@@ -161,7 +357,7 @@ uint32_t _RenderGetPhysicalDeviceNumber(VkInstance* _instance) {
 	return physicalDeviceNumber;
 }
 
-VkPhysicalDevice* _RenderGetPhysicalDevices(VkInstance* _instance, uint32_t _numDevices) {
+VkPhysicalDevice* _RendererVKGetPhysicalDevices(VkInstance* _instance, uint32_t _numDevices) {
 	MARS_RETURN_CLEAR;
 	VkPhysicalDevice* physicalDevices = NULL;
 
@@ -169,19 +365,19 @@ VkPhysicalDevice* _RenderGetPhysicalDevices(VkInstance* _instance, uint32_t _num
 	if (!_instance) {
 		MARS_DEBUG_WARN("Invalid vulkan instance!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_get_physical_devices_fail;
+		goto renderer_vk_get_physical_devices_fail;
 	}
 	if (_numDevices == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
-		goto render_get_physical_devices_fail;
+		goto renderer_vk_get_physical_devices_fail;
 	}
 
 	// Allocate buffers
 	physicalDevices = MARS_MALLOC(_numDevices * sizeof(*physicalDevices));
 	if (!physicalDevices) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device array!");
-		goto render_get_physical_devices_fail;
+		goto renderer_vk_get_physical_devices_fail;
 	}
 
 	// Retrieve device info
@@ -189,20 +385,20 @@ VkPhysicalDevice* _RenderGetPhysicalDevices(VkInstance* _instance, uint32_t _num
 	if ((res = vkEnumeratePhysicalDevices(*_instance, &_numDevices, physicalDevices)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving physical devices! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_get_physical_devices_fail;
+		goto renderer_vk_get_physical_devices_fail;
 	}
 	return physicalDevices;
 
-render_get_physical_devices_fail:
+renderer_vk_get_physical_devices_fail:
 	MARS_FREE(physicalDevices);
 	return NULL;
 }
 
-void _RenderDestroyPhysicalDevices(VkPhysicalDevice** _physicalDevices) {
+void _RendererVKDestroyPhysicalDevices(VkPhysicalDevice** _physicalDevices) {
 	MARS_FREE(*_physicalDevices);
 }
 
-uint32_t _RenderGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevices, uint32_t _numDevices) {
+uint32_t _RendererVKGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevices, uint32_t _numDevices) {
 	MARS_RETURN_CLEAR;
 	VkPhysicalDeviceProperties* physicalDeviceProperties = NULL;
 	VkPhysicalDeviceMemoryProperties* physicalDeviceMemoryProperties = NULL;
@@ -213,34 +409,34 @@ uint32_t _RenderGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevices, u
 	if (!_physicalDevices) {
 		MARS_DEBUG_WARN("Invalid physical device buffer!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	if (_numDevices == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 
 	// Allocate buffers
 	physicalDeviceProperties = MARS_MALLOC(_numDevices * sizeof(*physicalDeviceProperties));
 	if (!physicalDeviceProperties) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device property buffer!");
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	physicalDeviceMemoryProperties = MARS_MALLOC(_numDevices * sizeof(*physicalDeviceMemoryProperties));
 	if (!physicalDeviceMemoryProperties) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device memory property buffer!");
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	discreteGPUIndices = MARS_MALLOC(_numDevices * sizeof(*discreteGPUIndices));
 	if (!discreteGPUIndices) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate discrete GPU index buffer!");
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	integratedGPUIndices = MARS_MALLOC(_numDevices * sizeof(*integratedGPUIndices));
 	if (!integratedGPUIndices) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate integrated GPU index buffer!");
-		goto render_get_best_physical_device_index_fail;
+		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 
 	// Get physical devices
@@ -263,19 +459,19 @@ uint32_t _RenderGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevices, u
 	VkDeviceSize bestPhysicalDeviceMemory = 0;
 	for(uint32_t i=0; i<numDiscreteGPU; ++i) {
 		uint32_t deviceIdx = discreteGPUIndices[i];
-		if (bestPhysicalDeviceMemory < _RenderGetPhysicalDeviceTotalMemory(&physicalDeviceMemoryProperties[deviceIdx])) {
+		if (bestPhysicalDeviceMemory < _RendererVKGetPhysicalDeviceTotalMemory(&physicalDeviceMemoryProperties[deviceIdx])) {
 			bestPhysicalDeviceIdx = deviceIdx;
 		}
 	}
 	for(uint32_t i=0; i<numIntegratedGPU; ++i) {
 		uint32_t deviceIdx = integratedGPUIndices[i];
-		if (bestPhysicalDeviceMemory < _RenderGetPhysicalDeviceTotalMemory(&physicalDeviceMemoryProperties[deviceIdx])) {
+		if (bestPhysicalDeviceMemory < _RendererVKGetPhysicalDeviceTotalMemory(&physicalDeviceMemoryProperties[deviceIdx])) {
 			bestPhysicalDeviceIdx = deviceIdx;
 		}
 	}
 	return bestPhysicalDeviceIdx;
 
-render_get_best_physical_device_index_fail:
+renderer_vk_get_best_physical_device_index_fail:
 	MARS_FREE(physicalDeviceProperties);
 	MARS_FREE(physicalDeviceMemoryProperties);
 	MARS_FREE(discreteGPUIndices);
@@ -283,7 +479,7 @@ render_get_best_physical_device_index_fail:
 	return 0;
 }
 
-uint32_t _RenderGetPhysicalDeviceTotalMemory(VkPhysicalDeviceMemoryProperties* _properties) {
+uint32_t _RendererVKGetPhysicalDeviceTotalMemory(VkPhysicalDeviceMemoryProperties* _properties) {
 	MARS_RETURN_CLEAR;
 
 	// Error check
@@ -303,7 +499,7 @@ uint32_t _RenderGetPhysicalDeviceTotalMemory(VkPhysicalDeviceMemoryProperties* _
 	return physicalDeviceTotalMemory;
 }
 
-uint32_t _RenderGetQueueFamilyNumber(VkPhysicalDevice* _physicalDevice) {
+uint32_t _RendererVKGetQueueFamilyNumber(VkPhysicalDevice* _physicalDevice) {
 	MARS_RETURN_CLEAR;
 
 	// Error check
@@ -319,7 +515,7 @@ uint32_t _RenderGetQueueFamilyNumber(VkPhysicalDevice* _physicalDevice) {
 	return queueFamilyNumber;
 }
 
-VkQueueFamilyProperties* _RenderGetQueueFamilyProperties(VkPhysicalDevice* _physicalDevice, uint32_t _numQueueFamily) {
+VkQueueFamilyProperties* _RendererVKGetQueueFamilyProperties(VkPhysicalDevice* _physicalDevice, uint32_t _numQueueFamily) {
 	MARS_RETURN_CLEAR;
 	VkQueueFamilyProperties* queueFamilyProperties = NULL;
 
@@ -327,35 +523,35 @@ VkQueueFamilyProperties* _RenderGetQueueFamilyProperties(VkPhysicalDevice* _phys
 	if (!_physicalDevice) {
 		MARS_DEBUG_WARN("Invalid physical device reference!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_get_queue_family_properties_fail;
+		goto renderer_vk_get_queue_family_properties_fail;
 	}
 	if (_numQueueFamily == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
-		goto render_get_queue_family_properties_fail;
+		goto renderer_vk_get_queue_family_properties_fail;
 	}
 
 	// Retrieve queue info
 	queueFamilyProperties = MARS_MALLOC(_numQueueFamily * sizeof(*queueFamilyProperties));
 	if (!queueFamilyProperties) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue family property buffer!");
-		goto render_get_queue_family_properties_fail;
+		goto renderer_vk_get_queue_family_properties_fail;
 	}
 	vkGetPhysicalDeviceQueueFamilyProperties(*_physicalDevice, &_numQueueFamily, queueFamilyProperties);
 	return queueFamilyProperties;
 
-render_get_queue_family_properties_fail:
+renderer_vk_get_queue_family_properties_fail:
 	MARS_FREE(queueFamilyProperties);
 	return NULL;
 }
 
-void _RenderDestroyQueueFamilyProperties(VkQueueFamilyProperties** _queueFamilyProperties) {
+void _RendererVKDestroyQueueFamilyProperties(VkQueueFamilyProperties** _queueFamilyProperties) {
 	if (_queueFamilyProperties) {
 		MARS_FREE(*_queueFamilyProperties);
 	}
 }
 
-uint32_t _RenderGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _queueFamilyProperties, uint32_t _numQueueFamily) {
+uint32_t _RendererVKGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _queueFamilyProperties, uint32_t _numQueueFamily) {
 	MARS_RETURN_CLEAR;
 	uint32_t bestGraphicsQueueFamilyCount = 0;
 	uint32_t bestGraphicsQueueFamilyIdx = 0;
@@ -365,14 +561,14 @@ uint32_t _RenderGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _queueF
 	if (!_queueFamilyProperties) {
 		MARS_DEBUG_WARN("Invalid queue family properties reference!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
-		goto render_get_best_graphics_queue_family_index_fail;
+		goto renderer_vk_get_best_graphics_queue_family_index_fail;
 	}
 
 	// Allocate index buffer
 	graphicsQueueFamilyIndices = MARS_MALLOC(_numQueueFamily * sizeof(*graphicsQueueFamilyIndices));
 	if (!graphicsQueueFamilyIndices) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate graphics queue family index buffer!");
-		goto render_get_best_graphics_queue_family_index_fail;
+		goto renderer_vk_get_best_graphics_queue_family_index_fail;
 	}
 
 	// Score queue families
@@ -390,12 +586,12 @@ uint32_t _RenderGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _queueF
 		}
 	}
 
-render_get_best_graphics_queue_family_index_fail:
+renderer_vk_get_best_graphics_queue_family_index_fail:
 	MARS_FREE(graphicsQueueFamilyIndices);
 	return bestGraphicsQueueFamilyIdx;
 }
 
-uint32_t _RenderGetGraphicsQueueMode(VkQueueFamilyProperties* _queueFamilyProperties, uint32_t _graphicsQueueFamiltyIdx) {
+uint32_t _RendererVKGetGraphicsQueueMode(VkQueueFamilyProperties* _queueFamilyProperties, uint32_t _graphicsQueueFamiltyIdx) {
 	MARS_RETURN_CLEAR;
 
 	// Error check
@@ -412,7 +608,7 @@ uint32_t _RenderGetGraphicsQueueMode(VkQueueFamilyProperties* _queueFamilyProper
 	else { return 2; }
 }
 
-VkQueue _RenderGetDrawingQueue(VkDevice* _device, uint32_t _graphicsQueueFamilyIdx) {
+VkQueue _RendererVKGetDrawingQueue(VkDevice* _device, uint32_t _graphicsQueueFamilyIdx) {
 	MARS_RETURN_CLEAR;
 	VkQueue drawingQueue = VK_NULL_HANDLE;
 
@@ -428,7 +624,7 @@ VkQueue _RenderGetDrawingQueue(VkDevice* _device, uint32_t _graphicsQueueFamilyI
 	return drawingQueue;
 }
 
-VkQueue _RenderGetPresentingQueue(VkDevice* _device, uint32_t _graphicsQueueFamilyIdx, uint32_t _graphicsQueueMode) {
+VkQueue _RendererVKGetPresentingQueue(VkDevice* _device, uint32_t _graphicsQueueFamilyIdx, uint32_t _graphicsQueueMode) {
 	MARS_RETURN_CLEAR;
 	VkQueue presentingQueue = VK_NULL_HANDLE;
 
@@ -449,7 +645,7 @@ VkQueue _RenderGetPresentingQueue(VkDevice* _device, uint32_t _graphicsQueueFami
 	return presentingQueue;
 }
 
-VkSurfaceKHR _RenderCreateSurface(GLFWwindow* _window, VkInstance* _instance) {
+VkSurfaceKHR _RendererVKCreateSurface(GLFWwindow* _window, VkInstance* _instance) {
 	MARS_RETURN_CLEAR;
 	VkSurfaceKHR surface = VK_NULL_HANDLE;
 	VkResult res;
@@ -460,11 +656,11 @@ VkSurfaceKHR _RenderCreateSurface(GLFWwindow* _window, VkInstance* _instance) {
 	return surface;
 }
 
-void _RenderDestroySurface(VkSurfaceKHR* _surface, VkInstance* _instance) {
+void _RendererVKDestroySurface(VkSurfaceKHR* _surface, VkInstance* _instance) {
 	vkDestroySurfaceKHR(*_instance, *_surface, VK_NULL_HANDLE);
 }
 
-VkBool32 _RenderGetSurfaceSupport(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice, uint32_t _graphicsQueueFamilyIdx) {
+VkBool32 _RendererVKGetSurfaceSupport(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice, uint32_t _graphicsQueueFamilyIdx) {
 	MARS_RETURN_CLEAR;
 	VkBool32 surfaceSupport = 0;
 	VkResult res;
@@ -475,7 +671,7 @@ VkBool32 _RenderGetSurfaceSupport(VkSurfaceKHR* _surface, VkPhysicalDevice* _phy
 	return surfaceSupport;
 }
 
-VkSurfaceCapabilitiesKHR _RenderGetSurfaceCapabilities(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
+VkSurfaceCapabilitiesKHR _RendererVKGetSurfaceCapabilities(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
 	MARS_RETURN_CLEAR;
 	VkSurfaceCapabilitiesKHR surfaceCapabilities = { 0 };
 	VkResult res;
@@ -486,7 +682,7 @@ VkSurfaceCapabilitiesKHR _RenderGetSurfaceCapabilities(VkSurfaceKHR* _surface, V
 	return surfaceCapabilities;
 }
 
-VkSurfaceFormatKHR _RenderGetBestSurfaceFormat(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
+VkSurfaceFormatKHR _RendererVKGetBestSurfaceFormat(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
 	MARS_RETURN;
 	uint32_t numSurfaceFormat = 0;
 	VkSurfaceFormatKHR* surfaceFormats = NULL;
@@ -497,29 +693,29 @@ VkSurfaceFormatKHR _RenderGetBestSurfaceFormat(VkSurfaceKHR* _surface, VkPhysica
 	if ((res = vkGetPhysicalDeviceSurfaceFormatsKHR(*_physicalDevice, *_surface, &numSurfaceFormat, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating surface formats! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_get_best_surface_format_fail;
+		goto renderer_vk_get_best_surface_format_fail;
 	}
 
 	// Get all surface formats
 	surfaceFormats = MARS_MALLOC(numSurfaceFormat * sizeof(*surfaceFormats));
 	if (!surfaceFormats) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate surface formats buffer!");
-		goto render_get_best_surface_format_fail;
+		goto renderer_vk_get_best_surface_format_fail;
 	}
 	if ((res = vkGetPhysicalDeviceSurfaceFormatsKHR(*_physicalDevice, *_surface, &numSurfaceFormat, surfaceFormats)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving surface formats! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_get_best_surface_format_fail;
+		goto renderer_vk_get_best_surface_format_fail;
 	}
 	bestSurfaceFormat = surfaceFormats[0];
 
-render_get_best_surface_format_fail:
+renderer_vk_get_best_surface_format_fail:
 	MARS_FREE(surfaceFormats);
 	return bestSurfaceFormat;
 
 }
 
-VkPresentModeKHR _RenderGetBestPresentMode(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
+VkPresentModeKHR _RendererVKGetBestPresentMode(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
 	MARS_RETURN_CLEAR;
 	uint32_t numPresentMode = 0;
 	VkPresentModeKHR* presentModes = NULL;
@@ -530,19 +726,19 @@ VkPresentModeKHR _RenderGetBestPresentMode(VkSurfaceKHR* _surface, VkPhysicalDev
 	if ((res = vkGetPhysicalDeviceSurfacePresentModesKHR(*_physicalDevice, *_surface, &numPresentMode, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating present modes! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_get_best_present_mode_fail;
+		goto renderer_vk_get_best_present_mode_fail;
 	}
 
 	// Get present modes
 	presentModes = MARS_MALLOC(numPresentMode * sizeof(*presentModes));
 	if (!presentModes) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate present modes buffer!");
-		goto render_get_best_present_mode_fail;
+		goto renderer_vk_get_best_present_mode_fail;
 	}
 	if ((res = vkGetPhysicalDeviceSurfacePresentModesKHR(*_physicalDevice, *_surface, &numPresentMode, presentModes)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving present modes! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-		goto render_get_best_present_mode_fail;
+		goto renderer_vk_get_best_present_mode_fail;
 	}
 
 	// Select best present mode
@@ -552,12 +748,12 @@ VkPresentModeKHR _RenderGetBestPresentMode(VkSurfaceKHR* _surface, VkPhysicalDev
 		}
 	}
 
-render_get_best_present_mode_fail:
+renderer_vk_get_best_present_mode_fail:
 	MARS_FREE(presentModes);
 	return bestPresentMode;
 }
 
-VkExtent2D _RenderGetBestSwapchainExtent(VkSurfaceCapabilitiesKHR* _surfaceCapabilities, GLFWwindow* _window) {
+VkExtent2D _RendererVKGetBestSwapchainExtent(VkSurfaceCapabilitiesKHR* _surfaceCapabilities, GLFWwindow* _window) {
 	int framebufferWidth = 0;
 	int framebufferHeight = 0;
 	glfwGetFramebufferSize(_window, &framebufferWidth, &framebufferHeight);
@@ -582,7 +778,7 @@ VkExtent2D _RenderGetBestSwapchainExtent(VkSurfaceCapabilitiesKHR* _surfaceCapab
 	return bestSwapchainExtent;
 }
 
-VkSwapchainKHR _RenderCreateSwapchain(VkDevice* _device, VkSurfaceKHR* _surface, VkSurfaceCapabilitiesKHR* _surfaceCapabilities, VkSurfaceFormatKHR* _surfaceFormat, VkExtent2D* _swapChainExtent, VkPresentModeKHR* _presentMode, uint32_t _imageArrayLayers, uint32_t _graphicsQueueMode) {
+VkSwapchainKHR _RendererVKCreateSwapchain(VkDevice* _device, VkSurfaceKHR* _surface, VkSurfaceCapabilitiesKHR* _surfaceCapabilities, VkSurfaceFormatKHR* _surfaceFormat, VkExtent2D* _swapChainExtent, VkPresentModeKHR* _presentMode, uint32_t _imageArrayLayers, uint32_t _graphicsQueueMode) {
 	MARS_RETURN_CLEAR;
 	VkSharingMode imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	uint32_t numQueueFamilyIndices = 0;
@@ -628,11 +824,11 @@ VkSwapchainKHR _RenderCreateSwapchain(VkDevice* _device, VkSurfaceKHR* _surface,
 	return swapchain;
 }
 
-void _RenderDestroySwapchain(VkDevice* _device, VkSwapchainKHR* _swapchain) {
+void _RendererVKDestroySwapchain(VkDevice* _device, VkSwapchainKHR* _swapchain) {
 	vkDestroySwapchainKHR(*_device, *_swapchain, VK_NULL_HANDLE);
 }
 
-uint32_t _RenderGetSwapchainImageNumber(VkDevice* _device, VkSwapchainKHR* _swapchain) {
+uint32_t _RendererVKGetSwapchainImageNumber(VkDevice* _device, VkSwapchainKHR* _swapchain) {
 	MARS_RETURN_CLEAR;
 	uint32_t numSwapchainImages;
 	VkResult res;
@@ -644,7 +840,7 @@ uint32_t _RenderGetSwapchainImageNumber(VkDevice* _device, VkSwapchainKHR* _swap
 	return numSwapchainImages;
 }
 
-VkImage* _RenderGetSwapchainImages(VkDevice* _device, VkSwapchainKHR* _swapchain, uint32_t _numSwapchainImages) {
+VkImage* _RendererVKGetSwapchainImages(VkDevice* _device, VkSwapchainKHR* _swapchain, uint32_t _numSwapchainImages) {
 	MARS_RETURN_CLEAR;
 	VkImage* swapchainImages = MARS_MALLOC(_numSwapchainImages * sizeof(*swapchainImages));
 	if (!swapchainImages) {
@@ -660,11 +856,11 @@ VkImage* _RenderGetSwapchainImages(VkDevice* _device, VkSwapchainKHR* _swapchain
 	return swapchainImages;
 }
 
-void _RenderDestroySwapchainImages(VkImage** _images) {
+void _RendererVKDestroySwapchainImages(VkImage** _images) {
 	MARS_FREE(*_images);
 }
 
-VkImageView* _RenderCreateImageViews(VkDevice* _device, VkImage** _images, VkSurfaceFormatKHR* _format, uint32_t _numImages, uint32_t _imageArrayLayers) {
+VkImageView* _RendererVKCreateImageViews(VkDevice* _device, VkImage** _images, VkSurfaceFormatKHR* _format, uint32_t _numImages, uint32_t _imageArrayLayers) {
 	MARS_RETURN_CLEAR;
 	VkImageViewCreateInfo* imageViewCreateInfo = NULL;
 	VkImageView* imageViews = NULL;
@@ -686,12 +882,12 @@ VkImageView* _RenderCreateImageViews(VkDevice* _device, VkImage** _images, VkSur
 	imageViewCreateInfo = MARS_MALLOC(_numImages * sizeof(*imageViewCreateInfo));
 	if (!imageViewCreateInfo) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate image view create info buffer!");
-		goto render_create_image_views_fail;
+		goto renderer_vk_create_image_views_fail;
 	}
 	imageViews = MARS_MALLOC(_numImages * sizeof(*imageViews));
 	if (!imageViews) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate image view buffer!");
-		goto render_create_image_views_fail;
+		goto renderer_vk_create_image_views_fail;
 	}
 	for(uint32_t i = 0; i < _numImages; ++i) {
 		imageViewCreateInfo[i].sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -707,26 +903,26 @@ VkImageView* _RenderCreateImageViews(VkDevice* _device, VkImage** _images, VkSur
 		if ((res = vkCreateImageView(*_device, &(imageViewCreateInfo[i]), VK_NULL_HANDLE, &(imageViews[i]))) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating swapchain images! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_create_image_views_fail;
+			goto renderer_vk_create_image_views_fail;
 		}
 	}
 
 	MARS_FREE(imageViewCreateInfo);
 	return imageViews;
 
-render_create_image_views_fail:
+renderer_vk_create_image_views_fail:
 	MARS_FREE(imageViewCreateInfo);
 	MARS_FREE(imageViews);
 	return NULL;
 }
 
-void _RenderDestroyImageViews(VkDevice* _device, VkImageView** _imageViews, uint32_t _numImageViews) {
+void _RendererVKDestroyImageViews(VkDevice* _device, VkImageView** _imageViews, uint32_t _numImageViews) {
 	for(uint32_t i = 0; i < _numImageViews; ++i) {
 		vkDestroyImageView(*_device, (*_imageViews)[i], VK_NULL_HANDLE);
 	}
 }
 
-VkRenderPass _RenderCreateRenderPass(VkDevice* _device, VkSurfaceFormatKHR* _format) {
+VkRenderPass _RendererVKCreateRenderPass(VkDevice* _device, VkSurfaceFormatKHR* _format) {
 	MARS_RETURN_CLEAR;
 	VkAttachmentDescription attachmentDescription = {
 		0,
@@ -789,11 +985,11 @@ VkRenderPass _RenderCreateRenderPass(VkDevice* _device, VkSurfaceFormatKHR* _for
 	return renderPass;
 }
 
-void _RenderDestroyRenderPass(VkDevice* _device, VkRenderPass *_renderPass) {
+void _RendererVKDestroyRenderPass(VkDevice* _device, VkRenderPass *_renderPass) {
 	vkDestroyRenderPass(*_device, *_renderPass, VK_NULL_HANDLE);
 }
 
-VkFramebuffer* _RenderCreateFramebuffers(VkDevice *_device, VkRenderPass* _renderPass, VkExtent2D *_extent, VkImageView** _imageViews, uint32_t _numImageViews) {
+VkFramebuffer* _RendererVKCreateFramebuffers(VkDevice *_device, VkRenderPass* _renderPass, VkExtent2D *_extent, VkImageView** _imageViews, uint32_t _numImageViews) {
 	MARS_RETURN_CLEAR;
 	VkFramebufferCreateInfo* framebufferCreateInfo = NULL;
 	VkFramebuffer* framebuffers = NULL;
@@ -802,12 +998,12 @@ VkFramebuffer* _RenderCreateFramebuffers(VkDevice *_device, VkRenderPass* _rende
 	framebufferCreateInfo = MARS_MALLOC(_numImageViews * sizeof(*framebufferCreateInfo));
 	if (!framebufferCreateInfo) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate framebuffer create info buffer!");
-		goto render_create_framebuffers_fail;
+		goto renderer_vk_create_framebuffers_fail;
 	}
 	framebuffers = MARS_MALLOC(_numImageViews * sizeof((framebuffers)));
 	if (!framebuffers) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate framebuffer buffer!");
-		goto render_create_framebuffers_fail;
+		goto renderer_vk_create_framebuffers_fail;
 	}
 
 	// Populate create info
@@ -826,27 +1022,27 @@ VkFramebuffer* _RenderCreateFramebuffers(VkDevice *_device, VkRenderPass* _rende
 		if ((res = vkCreateFramebuffer(*_device, &framebufferCreateInfo[i], VK_NULL_HANDLE, &framebuffers[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating framebuffer! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_create_framebuffers_fail;
+			goto renderer_vk_create_framebuffers_fail;
 		}
 	}
 
 	MARS_FREE(framebufferCreateInfo);
 	return framebuffers;
 
-render_create_framebuffers_fail:
+renderer_vk_create_framebuffers_fail:
 	MARS_FREE(framebuffers);
 	MARS_FREE(framebufferCreateInfo);
 	return NULL;
 }
 
-void _RenderDestroyFramebuffers(VkDevice* _device, VkFramebuffer** _framebuffers, uint32_t _numFrameBuffers) {
+void _RendererVKDestroyFramebuffers(VkDevice* _device, VkFramebuffer** _framebuffers, uint32_t _numFrameBuffers) {
 	for(uint32_t i = 0; i < _numFrameBuffers; ++i) {
 		vkDestroyFramebuffer(*_device, (*_framebuffers)[i], VK_NULL_HANDLE);
 	}
 	MARS_FREE(*_framebuffers);
 }
 
-char* _RenderGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
+char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	MARS_RETURN_CLEAR;
 	char* shaderCode = NULL;
 	FILE* fp = NULL;
@@ -855,7 +1051,7 @@ char* _RenderGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	if (!_shaderSize) {
 		MARS_DEBUG_WARN("File size destination pointer invalid!");
 		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
-		goto render_get_shader_code_fail;
+		goto renderer_vk_get_shader_code_fail;
 	}
 
 	// Open shader file
@@ -863,7 +1059,7 @@ char* _RenderGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	if (!fp) {
 		MARS_DEBUG_WARN("Failed to open shader file! (%s)", _filename);
 		MARS_RETURN_SET(MARS_RETURN_FILESYSTEM_FAILURE);
-		goto render_get_shader_code_fail;
+		goto renderer_vk_get_shader_code_fail;
 	}
 
 	// Get file size
@@ -875,23 +1071,23 @@ char* _RenderGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	shaderCode = MARS_MALLOC((*_shaderSize) * sizeof(*shaderCode));
 	if (!shaderCode) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate shader code buffer!");
-		goto render_get_shader_code_fail;
+		goto renderer_vk_get_shader_code_fail;
 	}
 	fread(shaderCode, sizeof(*shaderCode), *_shaderSize, fp);
 
 	fclose(fp);
 	return shaderCode;
-render_get_shader_code_fail:
+renderer_vk_get_shader_code_fail:
 	if (fp) fclose(fp);
 	MARS_FREE(shaderCode);
 	return NULL;
 }
 
-void _RenderDestroyShaderCode(char** _shaderCode) {
+void _RendererVKDestroyShaderCode(char** _shaderCode) {
 	MARS_FREE(*_shaderCode);
 }
 
-VkShaderModule _RenderCreateShaderModule(VkDevice* _device, char* _shaderCode, uint32_t _shaderSize) {
+VkShaderModule _RendererVKCreateShaderModule(VkDevice* _device, char* _shaderCode, uint32_t _shaderSize) {
 	MARS_RETURN_CLEAR;
 	VkShaderModuleCreateInfo shaderModuleCreateInfo = {
 		VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -910,11 +1106,11 @@ VkShaderModule _RenderCreateShaderModule(VkDevice* _device, char* _shaderCode, u
 	return shaderModule;
 }
 
-void _RenderDestroyShaderModule(VkDevice* _device, VkShaderModule* _shaderModule) {
+void _RendererVKDestroyShaderModule(VkDevice* _device, VkShaderModule* _shaderModule) {
 	vkDestroyShaderModule(*_device, *_shaderModule, VK_NULL_HANDLE);
 }
 
-VkPipelineLayout _RenderCreatePipelineLayout(VkDevice* _device) {
+VkPipelineLayout _RendererVKCreatePipelineLayout(VkDevice* _device) {
 	MARS_RETURN_CLEAR;
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -935,11 +1131,11 @@ VkPipelineLayout _RenderCreatePipelineLayout(VkDevice* _device) {
 	return pipelineLayout;
 }
 
-void _RenderDestroyPipelineLayout(VkDevice* _device, VkPipelineLayout* _pipelineLayout) {
+void _RendererVKDestroyPipelineLayout(VkDevice* _device, VkPipelineLayout* _pipelineLayout) {
 	vkDestroyPipelineLayout(*_device, *_pipelineLayout, VK_NULL_HANDLE);
 }
 
-VkPipelineShaderStageCreateInfo _RenderConfigureVertexShaderStageCreateInfo(VkShaderModule* _vertexShaderModule, const char* _entryName) {
+VkPipelineShaderStageCreateInfo _RendererVKConfigureVertexShaderStageCreateInfo(VkShaderModule* _vertexShaderModule, const char* _entryName) {
 	VkPipelineShaderStageCreateInfo vertexShaderStageCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -953,7 +1149,7 @@ VkPipelineShaderStageCreateInfo _RenderConfigureVertexShaderStageCreateInfo(VkSh
 	return vertexShaderStageCreateInfo;
 }
 
-VkPipelineShaderStageCreateInfo _RenderConfigureFragmentShaderStageCreateInfo(VkShaderModule* _fragmentShaderModule, const char* _entryName) {
+VkPipelineShaderStageCreateInfo _RendererVKConfigureFragmentShaderStageCreateInfo(VkShaderModule* _fragmentShaderModule, const char* _entryName) {
 	VkPipelineShaderStageCreateInfo fragmentShaderStageCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -967,7 +1163,7 @@ VkPipelineShaderStageCreateInfo _RenderConfigureFragmentShaderStageCreateInfo(Vk
 	return fragmentShaderStageCreateInfo;
 }
 
-VkPipelineVertexInputStateCreateInfo _RenderConfigureVertexInputStateCreateInfo() {
+VkPipelineVertexInputStateCreateInfo _RendererVKConfigureVertexInputStateCreateInfo() {
 	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -981,7 +1177,7 @@ VkPipelineVertexInputStateCreateInfo _RenderConfigureVertexInputStateCreateInfo(
 	return vertexInputStateCreateInfo;
 }
 
-VkPipelineInputAssemblyStateCreateInfo _RenderConfigureInputAssemblyStateCreateInfo() {
+VkPipelineInputAssemblyStateCreateInfo _RendererVKConfigureInputAssemblyStateCreateInfo() {
 	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -993,23 +1189,23 @@ VkPipelineInputAssemblyStateCreateInfo _RenderConfigureInputAssemblyStateCreateI
 	return inputAssemblyStateCreateInfo;
 }
 
-VkPipeline _RenderCreateGraphicsPipeline(VkDevice* _device, VkPipelineLayout* _pipelineLayout, VkShaderModule *_vertexShaderModule, VkShaderModule* _fragmentShaderModule, VkRenderPass* _renderPass, VkExtent2D* _extent) {
+VkPipeline _RendererVKCreateGraphicsPipeline(VkDevice* _device, VkPipelineLayout* _pipelineLayout, VkShaderModule *_vertexShaderModule, VkShaderModule* _fragmentShaderModule, VkRenderPass* _renderPass, VkExtent2D* _extent) {
 	MARS_RETURN_CLEAR;
 
 	char entryName[] = "main";
 	VkPipelineShaderStageCreateInfo shaderStageCreateInfo[] = {
-		_RenderConfigureVertexShaderStageCreateInfo(_vertexShaderModule, entryName),
-		_RenderConfigureFragmentShaderStageCreateInfo(_fragmentShaderModule, entryName)
+		_RendererVKConfigureVertexShaderStageCreateInfo(_vertexShaderModule, entryName),
+		_RendererVKConfigureFragmentShaderStageCreateInfo(_fragmentShaderModule, entryName)
 	};
-	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = _RenderConfigureVertexInputStateCreateInfo();
-	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = _RenderConfigureInputAssemblyStateCreateInfo();
-	VkViewport viewport = _RenderConfigureViewport(_extent);
-	VkRect2D scissor = _RenderConfigureScissor(_extent, 0, 0, 0, 0);
-	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = _RenderConfigureViewportStateCreateInfo(&viewport, &scissor);
-	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = _RenderConfigureRasterizationStateCreateInfo();
-	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = _RenderConfigureMultisampleStateCreateInfo();
-	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = _RenderConfigureColorBlendAttachmentState();
-	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = _RenderConfigureColorBlendStateCreateInfo(&colorBlendAttachmentState);
+	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = _RendererVKConfigureVertexInputStateCreateInfo();
+	VkPipelineInputAssemblyStateCreateInfo inputAssemblyStateCreateInfo = _RendererVKConfigureInputAssemblyStateCreateInfo();
+	VkViewport viewport = _RendererVKConfigureViewport(_extent);
+	VkRect2D scissor = _RendererVKConfigureScissor(_extent, 0, 0, 0, 0);
+	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = _RendererVKConfigureViewportStateCreateInfo(&viewport, &scissor);
+	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = _RendererVKConfigureRasterizationStateCreateInfo();
+	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = _RendererVKConfigureMultisampleStateCreateInfo();
+	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = _RendererVKConfigureColorBlendAttachmentState();
+	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = _RendererVKConfigureColorBlendStateCreateInfo(&colorBlendAttachmentState);
 
 	VkGraphicsPipelineCreateInfo graphicsPipelineCreateInfo = {
 		VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -1042,11 +1238,11 @@ VkPipeline _RenderCreateGraphicsPipeline(VkDevice* _device, VkPipelineLayout* _p
 	return graphicsPipeline;
 }
 
-void _RenderDestroyGraphicsPipeline(VkDevice* _device, VkPipeline* _graphicsPipeline) {
+void _RendererVKDestroyGraphicsPipeline(VkDevice* _device, VkPipeline* _graphicsPipeline) {
 	vkDestroyPipeline(*_device, *_graphicsPipeline, VK_NULL_HANDLE);
 }
 
-VkViewport _RenderConfigureViewport(VkExtent2D *_extent) {
+VkViewport _RendererVKConfigureViewport(VkExtent2D *_extent) {
 	VkViewport viewport = {
 		1.0f,
 		1.0f,
@@ -1059,7 +1255,7 @@ VkViewport _RenderConfigureViewport(VkExtent2D *_extent) {
 	return viewport;
 }
 
-VkRect2D _RenderConfigureScissor(VkExtent2D *_extent, uint32_t _left, uint32_t _right, uint32_t _top, uint32_t _bottom) {
+VkRect2D _RendererVKConfigureScissor(VkExtent2D *_extent, uint32_t _left, uint32_t _right, uint32_t _top, uint32_t _bottom) {
 	if(_left > _extent->width){
 		_left = _extent->width;
 	}
@@ -1087,7 +1283,7 @@ VkRect2D _RenderConfigureScissor(VkExtent2D *_extent, uint32_t _left, uint32_t _
 	return scissor;
 }
 
-VkPipelineViewportStateCreateInfo _RenderConfigureViewportStateCreateInfo(VkViewport* _viewport, VkRect2D *_scissor) {
+VkPipelineViewportStateCreateInfo _RendererVKConfigureViewportStateCreateInfo(VkViewport* _viewport, VkRect2D *_scissor) {
 	VkPipelineViewportStateCreateInfo viewportStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -1101,7 +1297,7 @@ VkPipelineViewportStateCreateInfo _RenderConfigureViewportStateCreateInfo(VkView
 	return viewportStateCreateInfo;
 }
 
-VkPipelineRasterizationStateCreateInfo _RenderConfigureRasterizationStateCreateInfo() {
+VkPipelineRasterizationStateCreateInfo _RendererVKConfigureRasterizationStateCreateInfo() {
 	VkPipelineRasterizationStateCreateInfo rasterizationStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -1121,7 +1317,7 @@ VkPipelineRasterizationStateCreateInfo _RenderConfigureRasterizationStateCreateI
 	return rasterizationStateCreateInfo;
 }
 
-VkPipelineMultisampleStateCreateInfo _RenderConfigureMultisampleStateCreateInfo() {
+VkPipelineMultisampleStateCreateInfo _RendererVKConfigureMultisampleStateCreateInfo() {
 	VkPipelineMultisampleStateCreateInfo multisampleStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -1137,7 +1333,7 @@ VkPipelineMultisampleStateCreateInfo _RenderConfigureMultisampleStateCreateInfo(
 	return multisampleStateCreateInfo;
 }
 
-VkPipelineColorBlendAttachmentState _RenderConfigureColorBlendAttachmentState() {
+VkPipelineColorBlendAttachmentState _RendererVKConfigureColorBlendAttachmentState() {
 	VkPipelineColorBlendAttachmentState colorBlendAttachmentState = {
 		VK_FALSE,
 		VK_BLEND_FACTOR_ONE,
@@ -1152,7 +1348,7 @@ VkPipelineColorBlendAttachmentState _RenderConfigureColorBlendAttachmentState() 
 	return colorBlendAttachmentState;
 }
 
-VkPipelineColorBlendStateCreateInfo _RenderConfigureColorBlendStateCreateInfo(VkPipelineColorBlendAttachmentState* _colorBlendAttachmentState) {
+VkPipelineColorBlendStateCreateInfo _RendererVKConfigureColorBlendStateCreateInfo(VkPipelineColorBlendAttachmentState* _colorBlendAttachmentState) {
 	VkPipelineColorBlendStateCreateInfo colorBlendStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -1167,7 +1363,7 @@ VkPipelineColorBlendStateCreateInfo _RenderConfigureColorBlendStateCreateInfo(Vk
 	return colorBlendStateCreateInfo;
 }
 
-VkCommandPool _RenderCreateCommandPool(VkDevice* _device, uint32_t _queueFamilyIndex) {
+VkCommandPool _RendererVKCreateCommandPool(VkDevice* _device, uint32_t _queueFamilyIndex) {
 	MARS_RETURN_CLEAR;
 	VkCommandPoolCreateInfo commandPoolCreateInfo = {
 		VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -1185,11 +1381,11 @@ VkCommandPool _RenderCreateCommandPool(VkDevice* _device, uint32_t _queueFamilyI
 	return commandPool;
 }
 
-void _RenderDestroyCommandPool(VkDevice* _device, VkCommandPool* _commandPool) {
+void _RendererVKDestroyCommandPool(VkDevice* _device, VkCommandPool* _commandPool) {
 	vkDestroyCommandPool(*_device, *_commandPool, VK_NULL_HANDLE);
 }
 
-VkCommandBuffer* _RenderCreateCommandBuffers(VkDevice* _device, VkCommandPool* _commandPool, uint32_t _numCommandBuffers) {
+VkCommandBuffer* _RendererVKCreateCommandBuffers(VkDevice* _device, VkCommandPool* _commandPool, uint32_t _numCommandBuffers) {
 	MARS_RETURN_CLEAR;
 	VkCommandBufferAllocateInfo commandBufferAllocateInfo = {
 		VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -1211,12 +1407,12 @@ VkCommandBuffer* _RenderCreateCommandBuffers(VkDevice* _device, VkCommandPool* _
 	return commandBuffers;
 }
 
-void _RenderDestroyCommandBuffers(VkDevice* _device, VkCommandBuffer** _commandBuffers, VkCommandPool* _commandPool, uint32_t _numCommandBuffers) {
+void _RendererVKDestroyCommandBuffers(VkDevice* _device, VkCommandBuffer** _commandBuffers, VkCommandPool* _commandPool, uint32_t _numCommandBuffers) {
 	vkFreeCommandBuffers(*_device, *_commandPool, _numCommandBuffers, *_commandBuffers);
 	MARS_FREE(*_commandBuffers);
 }
 
-void _RenderRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, uint32_t _numCommandBuffers) {
+void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, uint32_t _numCommandBuffers) {
 	MARS_RETURN_CLEAR;
 	VkCommandBufferBeginInfo* commandBufferBeginInfos = NULL;
 	VkRenderPassBeginInfo* renderPassBeginInfos = NULL;
@@ -1229,12 +1425,12 @@ void _RenderRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass
 	commandBufferBeginInfos = MARS_MALLOC(_numCommandBuffers * sizeof(*commandBufferBeginInfos));
 	if (!commandBufferBeginInfos) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate command buffer info buffer!");
-		goto render_record_command_buffers_fail;
+		goto renderer_vk_record_command_buffers_fail;
 	}
 	renderPassBeginInfos = MARS_MALLOC(_numCommandBuffers * sizeof(*renderPassBeginInfos));
 	if (!renderPassBeginInfos) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate render pass info buffer!");
-		goto render_record_command_buffers_fail;
+		goto renderer_vk_record_command_buffers_fail;
 	}
 
 	for(uint32_t i = 0; i < _numCommandBuffers; ++i) {
@@ -1255,7 +1451,7 @@ void _RenderRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass
 		if ((res = vkBeginCommandBuffer((*_commandBuffers)[i], &commandBufferBeginInfos[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error starting command submission! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_record_command_buffers_fail;
+			goto renderer_vk_record_command_buffers_fail;
 		}
 		vkCmdBeginRenderPass((*_commandBuffers)[i], &renderPassBeginInfos[i], VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline((*_commandBuffers)[i], VK_PIPELINE_BIND_POINT_GRAPHICS, *_pipeline);
@@ -1264,16 +1460,16 @@ void _RenderRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass
 		if ((res = vkEndCommandBuffer((*_commandBuffers)[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error ending command submission! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_record_command_buffers_fail;
+			goto renderer_vk_record_command_buffers_fail;
 		}
 	}
 
-render_record_command_buffers_fail:
+renderer_vk_record_command_buffers_fail:
 	MARS_FREE(commandBufferBeginInfos);
 	MARS_FREE(renderPassBeginInfos);
 }
 
-VkSemaphore* _RenderCreateSemaphores(VkDevice* _device, uint32_t _maxFrames) {
+VkSemaphore* _RendererVKCreateSemaphores(VkDevice* _device, uint32_t _maxFrames) {
 	MARS_RETURN_CLEAR;
 	VkSemaphore* semaphores = NULL;
 
@@ -1285,31 +1481,31 @@ VkSemaphore* _RenderCreateSemaphores(VkDevice* _device, uint32_t _maxFrames) {
 	semaphores = MARS_MALLOC(_maxFrames * sizeof(*semaphores));
 	if (!semaphores) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate semaphores buffer!");
-		goto render_create_semaphores_fail;
+		goto renderer_vk_create_semaphores_fail;
 	}
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		VkResult res;
 		if ((res = vkCreateSemaphore(*_device, &semaphoreCreateInfo, VK_NULL_HANDLE, &semaphores[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating semaphore! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_create_semaphores_fail;
+			goto renderer_vk_create_semaphores_fail;
 		}
 	}
 	return semaphores;
 
-render_create_semaphores_fail:
+renderer_vk_create_semaphores_fail:
 	MARS_FREE(semaphores);
 	return NULL;
 }
 
-void _RenderDestroySemaphores(VkDevice* _device, VkSemaphore** _semaphores, uint32_t _maxFrames) {
+void _RendererVKDestroySemaphores(VkDevice* _device, VkSemaphore** _semaphores, uint32_t _maxFrames) {
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		vkDestroySemaphore(*_device, (*_semaphores)[i], VK_NULL_HANDLE);
 	}
 	MARS_FREE(*_semaphores);
 }
 
-VkFence* _RenderCreateFences(VkDevice* _device, uint32_t _maxFrames) {
+VkFence* _RendererVKCreateFences(VkDevice* _device, uint32_t _maxFrames) {
 	MARS_RETURN_CLEAR;
 	VkFence* fences = NULL;
 
@@ -1321,31 +1517,31 @@ VkFence* _RenderCreateFences(VkDevice* _device, uint32_t _maxFrames) {
 	fences = MARS_MALLOC(_maxFrames * sizeof(*fences));
 	if (!fences) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate fences buffer!");
-		goto render_create_fences_fail;
+		goto renderer_vk_create_fences_fail;
 	}
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		VkResult res;
 		if ((res = vkCreateFence(*_device, &fenceCreateInfo, VK_NULL_HANDLE, &fences[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating fence! (%d)", (int)res);
 			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
-			goto render_create_fences_fail;
+			goto renderer_vk_create_fences_fail;
 		}
 	}
 	return fences;
 
-render_create_fences_fail:
+renderer_vk_create_fences_fail:
 	MARS_FREE(fences);
 	return NULL;
 }
 
-void _RenderDestroyFences(VkDevice* _device, VkFence** _fences, uint32_t _maxFrames) {
+void _RendererVKDestroyFences(VkDevice* _device, VkFence** _fences, uint32_t _maxFrames) {
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		vkDestroyFence(*_device, (*_fences)[i], VK_NULL_HANDLE);
 	}
 	MARS_FREE(*_fences);
 }
 
-VkFence* _RenderCreateEmptyFences(uint32_t _maxFrames) {
+VkFence* _RendererVKCreateEmptyFences(uint32_t _maxFrames) {
 	VkFence* fences = MARS_MALLOC(_maxFrames * sizeof(*fences));
 	if (!fences) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate fences buffer!");
@@ -1357,6 +1553,6 @@ VkFence* _RenderCreateEmptyFences(uint32_t _maxFrames) {
 	return fences;
 }
 
-void _RenderDestroyEmptyFences(VkFence** _fences) {
+void _RendererVKDestroyEmptyFences(VkFence** _fences) {
 	MARS_FREE(*_fences);
 }

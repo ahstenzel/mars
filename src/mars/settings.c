@@ -28,6 +28,7 @@ SettingsList* GenerateDefaultSettings() {
 	displaySettingsList->_vsync = true;
 	displaySettingsList->_width = 640;
 	displaySettingsList->_height = 480;
+	displaySettingsList->_rendererBackend = MARS_RENDERER_BACKEND_DEFAULT;
 	settingsList->_displaySettingsList = displaySettingsList;
 
 	return settingsList;

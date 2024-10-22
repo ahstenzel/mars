@@ -29,7 +29,7 @@ set(mars_src
 	"${SRC_DIR}/mars/input.c"
 	"${SRC_DIR}/mars/display.c"
 	"${SRC_DIR}/mars/settings.c"
-	"${SRC_DIR}/mars/renderer.c"
+	"${SRC_DIR}/mars/renderer_vk.c"
 	"${SRC_DIR}/external/inih/ini.c"
 )
 
