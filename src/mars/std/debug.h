@@ -106,6 +106,7 @@ extern unsigned int _mars_g_return_code;	// Last recorded function return code.
 #define MARS_ERROR_STATUS_GENERIC		0x01		// Mask for uncategorized general error.
 #define MARS_ERROR_STATUS_BAD_ALLOC		0x02		// Mask for failed memory allocation.
 #define MARS_ERROR_STATUS_FILESYS		0x04		// Mask for filesystem error.
+#define MARS_ERROR_STATUS_RENDERER		0x08		// Mask for rendering error.
 
 // Global variables
 extern unsigned char _mars_g_error_status_mask;  	// Mask for disabling certain error types

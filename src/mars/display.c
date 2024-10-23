@@ -67,6 +67,7 @@ void _DestroyDisplay(Display* _display) {
 		glfwDestroyWindow(_display->_window);
 		glfwTerminate();
 		MARS_FREE(_display);
+		_display = NULL;
 	}
 }
 
@@ -101,5 +102,11 @@ int _GetRendererBackend() {
 		backend = MARS_RENDERER_BACKEND_VULKAN;
 		#endif
 	}
+
+	// Dont use a backend that's been disabled
+	#if defined(MARS_DISABLE_RENDERER_DX12)
+	if (backend == MARS_RENDERER_BACKEND_DX12) { backend = MARS_RENDERER_BACKEND_VULKAN; }
+	#endif
+
 	return backend;
 }

@@ -32,13 +32,23 @@ typedef struct {
 	uint32_t _graphicsQueueMode;
 	uint32_t _numSwapchainImages;
 	uint32_t _maxFrames;
+	bool _framebufferResized;
 } RendererVulkan;
+
+
+//----------------------------------------------------------------------------------
+// Engine functions
+//----------------------------------------------------------------------------------
 
 RendererVulkan* _RendererVKCreate(GLFWwindow* _window);
 
 void _RendererVKDestroy(RendererVulkan* _renderer);
 
 void _RendererVKUpdate(RendererVulkan* _renderer);
+
+void _RendererVKRecreateSwapchain(RendererVulkan* _renderer, GLFWwindow* _window);
+
+void _RendererVKCleanupSwapchain(RendererVulkan* _renderer);
 
 
 //----------------------------------------------------------------------------------

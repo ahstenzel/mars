@@ -1,7 +1,14 @@
 #include "mars/renderer_vk.h"
+#include "mars/game.h"
 #include "mars/shader.h"
 
 #define MARS_PHYSICAL_DEVICE(w) ((w)->_physicalDevices[(w)->_physicalDeviceIdx])
+#define MARS_VK_RENDERER ((RendererVulkan*)MARS_DISPLAY->_renderer)
+
+static void _RendererVKFramebufferResizeCallback(GLFWwindow* _window, int _width, int _height) {
+	RendererVulkan* renderer = glfwGetWindowUserPointer(_window);
+	renderer->_framebufferResized = true;
+}
 
 RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	MARS_RETURN_CLEAR;
@@ -15,6 +22,11 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate renderer structure!");
 		goto renderer_vk_create_fail;
 	}
+	renderer->_framebufferResized = false;
+
+	// Register callbacks
+	glfwSetWindowUserPointer(_window, &renderer);
+	glfwSetFramebufferSizeCallback(_window, _RendererVKFramebufferResizeCallback);
 
 	// Initialize Vulkan
 	MARS_DEBUG_LOG("Initializing Vulkan");
@@ -70,7 +82,6 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	// Create shader pipelines
 	MARS_DEBUG_LOG("Creating default vertex shader module");
 	size_t vertexShaderSize = base64Decode(_SHADER_BIN_DEFAULT_VERT_SPV, NULL, 0);
-	MARS_DEBUG_LOG("Vertex shader binary size: %d", vertexShaderSize);
 	vertexShaderCode = MARS_MALLOC(vertexShaderSize);
 	if (!vertexShaderCode) {
 		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate default vertex shader code buffer!");
@@ -155,11 +166,21 @@ void _RendererVKDestroy(RendererVulkan* _renderer) {
 }
 
 void _RendererVKUpdate(RendererVulkan* _renderer) {
-	// Wait to acquire next image from the swapchain
+	// Wait for the last frame to finish
 	static uint32_t currentFrame = 0;
 	vkWaitForFences(_renderer->_device, 1, &_renderer->_frontFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+	// Get the next image from the swap chain
 	uint32_t imageIndex = 0;
-	vkAcquireNextImageKHR(_renderer->_device, _renderer->_swapchain, UINT64_MAX, _renderer->_waitSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	VkResult res = vkAcquireNextImageKHR(_renderer->_device, _renderer->_swapchain, UINT64_MAX, _renderer->_waitSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	if (res == VK_ERROR_OUT_OF_DATE_KHR) {
+		_RendererVKRecreateSwapchain(_renderer, MARS_WINDOW);
+		return;
+	}
+	else if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
+		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to acquire next swap chain image!");
+		goto renderer_vk_update_fail;
+	}
 	if (_renderer->_backFences[imageIndex] != VK_NULL_HANDLE) {
 		vkWaitForFences(_renderer->_device, 1, &_renderer->_backFences[imageIndex], VK_TRUE, UINT64_MAX);
 	}
@@ -179,7 +200,11 @@ void _RendererVKUpdate(RendererVulkan* _renderer) {
 		&_renderer->_signalSemaphores[currentFrame]
 	};
 	vkResetFences(_renderer->_device, 1, &_renderer->_frontFences[currentFrame]);
-	vkQueueSubmit(_renderer->_drawingQueue, 1, &submitInfo, _renderer->_frontFences[currentFrame]);
+	res = vkQueueSubmit(_renderer->_drawingQueue, 1, &submitInfo, _renderer->_frontFences[currentFrame]);
+	if (res != VK_SUCCESS) {
+		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to submit draw command buffer!");
+		goto renderer_vk_update_fail;
+	}
 
 	// Present next image
 	VkPresentInfoKHR presentInfo = {
@@ -192,14 +217,98 @@ void _RendererVKUpdate(RendererVulkan* _renderer) {
 		&imageIndex,
 		VK_NULL_HANDLE
 	};
-	vkQueuePresentKHR(_renderer->_presentingQueue, &presentInfo);
+	res = vkQueuePresentKHR(_renderer->_presentingQueue, &presentInfo);
+	if (res == VK_ERROR_OUT_OF_DATE_KHR || res == VK_SUBOPTIMAL_KHR || _renderer->_framebufferResized) {
+		_renderer->_framebufferResized = false;
+		_RendererVKRecreateSwapchain(_renderer, MARS_WINDOW);
+	}
+	else if (res != VK_SUCCESS) {
+		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to present swap chain image!");
+		goto renderer_vk_update_fail;
+	}
 	currentFrame = (currentFrame + 1) % _renderer->_maxFrames;
+
+	return;
+renderer_vk_update_fail:
+	_DestroyDisplay(MARS_DISPLAY);
+}
+
+void _RendererVKRecreateSwapchain(RendererVulkan* _renderer, GLFWwindow* _window) {
+	// Halt on minimization
+	int width = 0, height = 0;
+	glfwGetFramebufferSize(_window, &width, &height);
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(_window, &width, &height);
+		glfwWaitEvents();
+	}
+
+	// Query vulkan API for new swap chain properties
+	vkDeviceWaitIdle(_renderer->_device);
+	_RendererVKCleanupSwapchain(_renderer);
+	VkSurfaceCapabilitiesKHR surfaceCapabilities = _RendererVKGetSurfaceCapabilities(&_renderer->_surface, &MARS_PHYSICAL_DEVICE(_renderer));
+	VkSurfaceFormatKHR bestSurfaceFormat = _RendererVKGetBestSurfaceFormat(&_renderer->_surface, &MARS_PHYSICAL_DEVICE(_renderer));
+	VkPresentModeKHR bestPresentMode = _RendererVKGetBestPresentMode(&_renderer->_surface, &MARS_PHYSICAL_DEVICE(_renderer));
+	VkExtent2D bestSwapchainExtent = _RendererVKGetBestSwapchainExtent(&surfaceCapabilities, _window);
+	uint32_t imageArrayLayers = 1;
+
+	// Recreate assets
+	_renderer->_swapchain = _RendererVKCreateSwapchain(&_renderer->_device, &_renderer->_surface, &surfaceCapabilities, &bestSurfaceFormat, &bestSwapchainExtent, &bestPresentMode, imageArrayLayers, _renderer->_graphicsQueueMode);
+	_renderer->_numSwapchainImages = _RendererVKGetSwapchainImageNumber(&_renderer->_device, &_renderer->_swapchain);
+	_renderer->_swapchainImages = _RendererVKGetSwapchainImages(&_renderer->_device, &_renderer->_swapchain, _renderer->_numSwapchainImages);
+	_renderer->_swapchainImageViews = _RendererVKCreateImageViews(&_renderer->_device, &_renderer->_swapchainImages, &bestSurfaceFormat, _renderer->_numSwapchainImages, imageArrayLayers);
+	_renderer->_framebuffers = _RendererVKCreateFramebuffers(&_renderer->_device, &_renderer->_renderPass, &bestSwapchainExtent, &_renderer->_swapchainImageViews, _renderer->_numSwapchainImages);
+	_RendererVKRecordCommandBuffers(&_renderer->_commandBuffers, &_renderer->_renderPass, &_renderer->_framebuffers, &bestSwapchainExtent, &_renderer->_graphicsPipeline, _renderer->_numSwapchainImages);
+}
+
+void _RendererVKCleanupSwapchain(RendererVulkan* _renderer) {
+	_RendererVKDestroyFramebuffers(&_renderer->_device, &_renderer->_framebuffers, _renderer->_numSwapchainImages);
+	_RendererVKDestroyImageViews(&_renderer->_device, &_renderer->_swapchainImageViews, _renderer->_numSwapchainImages);
+	_RendererVKDestroySwapchainImages(&_renderer->_swapchainImages);
+	_RendererVKDestroySwapchain(&_renderer->_device, &_renderer->_swapchain);
 }
 
 VkInstance _RendererVKCreateInstance() {
 	MARS_RETURN_CLEAR;
+	char** extensions = NULL;
 
-	// Define application parameters
+	// Get GLFW extensionss
+	uint32_t numExtensions = 0;
+	const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&numExtensions);
+	if (!glfw_extensions) {
+		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to get required extensions!");
+		goto renderer_vk_create_instance_fail;
+	}
+	extensions = MARS_MALLOC(numExtensions * sizeof(*extensions));
+	if (!extensions) {
+		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate extension name buffer!");
+		goto renderer_vk_create_instance_fail;
+	}
+	for(size_t i = 0; i < numExtensions; ++i) {
+		extensions[i] = _strdup(glfw_extensions[i]);
+		if (!extensions[i]) {
+			MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate extension name string (%d)!", (int)i);
+			goto renderer_vk_create_instance_fail;
+		}
+	}
+
+	// Get optional extensions
+	#if defined(MARS_DEBUG)
+	const char** new_extensions = MARS_REALLOC(extensions, (numExtensions + 1) * sizeof(*extensions));
+	new_extensions[numExtensions] = _strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	if (!new_extensions[numExtensions]) {
+		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate debug extension name string!");
+		goto renderer_vk_create_instance_fail;
+	}
+	numExtensions++;
+	extensions = new_extensions;
+	#endif
+
+	MARS_DEBUG_LOG("Vulkan extensions:");
+	for(size_t s = 0; s < numExtensions; ++s) {
+		MARS_DEBUG_LOG(" (%s)", extensions[s]);
+	}
+
+	// Create instance
 	VkApplicationInfo applicationInfo = {
 		VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		VK_NULL_HANDLE,
@@ -215,8 +324,6 @@ VkInstance _RendererVKCreateInstance() {
 	const char* layers[] = {
 		layerList[0]
 	};
-	uint32_t numExtensions = 0;
-	const char** extensions = glfwGetRequiredInstanceExtensions(&numExtensions);
 	VkInstanceCreateInfo instanceCreateInfo = {
 		VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 		VK_NULL_HANDLE,
@@ -227,14 +334,15 @@ VkInstance _RendererVKCreateInstance() {
 		numExtensions,
 		extensions
 	};
-
-	// Create instance
 	VkInstance instance;
 	VkResult res;
 	if ((res = vkCreateInstance(&instanceCreateInfo, VK_NULL_HANDLE, &instance)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating instance! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
 	}
+
+renderer_vk_create_instance_fail:
+	MARS_FREE(extensions);
 	return instance;
 }
 
@@ -1368,7 +1476,7 @@ VkCommandPool _RendererVKCreateCommandPool(VkDevice* _device, uint32_t _queueFam
 	VkCommandPoolCreateInfo commandPoolCreateInfo = {
 		VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 		VK_NULL_HANDLE,
-		0,
+		VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
 		_queueFamilyIndex
 	};
 

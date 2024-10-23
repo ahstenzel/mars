@@ -43,5 +43,6 @@ void _DestroySettings(SettingsList* _settingsList) {
 		MARS_FREE(_settingsList->_inputSettingsList);
 		MARS_FREE(_settingsList->_displaySettingsList);
 		MARS_FREE(_settingsList);
+		_settingsList = NULL;
 	}
 }
