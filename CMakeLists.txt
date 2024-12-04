@@ -25,12 +25,16 @@ set(mars_src
 	"${SRC_DIR}/mars/std/vector.c"
 	"${SRC_DIR}/mars/std/debug.c"
 	"${SRC_DIR}/mars/std/base64.c"
+	"${SRC_DIR}/mars/std/buffer.c"
 	"${SRC_DIR}/mars/game.c"
 	"${SRC_DIR}/mars/input.c"
 	"${SRC_DIR}/mars/display.c"
 	"${SRC_DIR}/mars/settings.c"
 	"${SRC_DIR}/mars/renderer_vk.c"
+	"${SRC_DIR}/mars/resource.c"
 	"${SRC_DIR}/external/inih/ini.c"
+	"${SRC_DIR}/external/aes/aes.c"
+	"${SRC_DIR}/external/lz4/lz4.c"
 )
 
 # Set outputs
@@ -52,7 +56,8 @@ target_include_directories(mars
 	PUBLIC ${SRC_DIR}
 	PUBLIC ${SRC_DIR}/external/
 	PUBLIC ${SRC_DIR}/external/inih
-	PUBLIC ${SRC_DIR}/external/mimalloc
+	PUBLIC ${SRC_DIR}/external/aes
+	PUBLIC ${SRC_DIR}/external/lz4
 	PUBLIC ${VULKAN_INCLUDE_DIRS}
 )
 target_link_directories(mars PUBLIC ${LIB_DIR})

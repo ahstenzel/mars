@@ -33,6 +33,7 @@
 #include "mars/std/utilities.h"
 #include "mars/std/vector.h"
 #include "mars/std/base64.h"
+#include "mars/std/buffer.h"
 
 // External includes
 #define INI_USE_STACK 0
@@ -40,6 +41,12 @@
 #include "external/inih/ini.h"
 #define GLFW_INCLUDE_VULKAN
 #include "external/GLFW/glfw3.h"
+#define LZ4_HEAPMODE 1
+#include "external/lz4/lz4.h"
+#define CBC 1
+#define ECB 0
+#define CTR 0
+#include "external/aes/aes.h"
 //#include <shaderc/shaderc.h>
 
 #endif // MARS_COMMON_H

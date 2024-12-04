@@ -8,8 +8,8 @@ Display* _CreateDisplay(DisplayDesc _desc) {
 
 	// Error check
 	if (!_desc.name) {
-		MARS_DEBUG_WARN("Invalid display name!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_DEBUG_WARN("NULL display name!");
+		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
 		goto create_display_fail;
 	}
 
@@ -67,7 +67,6 @@ void _DestroyDisplay(Display* _display) {
 		glfwDestroyWindow(_display->_window);
 		glfwTerminate();
 		MARS_FREE(_display);
-		_display = NULL;
 	}
 }
 

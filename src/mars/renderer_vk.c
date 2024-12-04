@@ -1157,8 +1157,8 @@ char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 
 	// Validate inputs
 	if (!_shaderSize) {
-		MARS_DEBUG_WARN("File size destination pointer invalid!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_DEBUG_WARN("NULL file size destination pointer!");
+		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
 		goto renderer_vk_get_shader_code_fail;
 	}
 

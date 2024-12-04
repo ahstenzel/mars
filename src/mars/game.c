@@ -28,6 +28,14 @@ void CreateGame(const char* _name) {
 		goto create_game_failed;
 	}
 
+	// Initialize resource manager
+	MARS_DEBUG_LOG("===Creating resource manager===");
+	MARS_RESOURCES = _CreateResourceManager();
+	if (!MARS_RESOURCES) {
+		MARS_ABORT(MARS_ERROR_STATUS_GENERIC, "Failed to initialize resource manager!");
+		goto create_game_failed;
+	}
+
 	return;
 create_game_failed:
 	DestroyGame();
@@ -41,6 +49,8 @@ void DestroyGame() {
 		_DestroySettings(MARS_SETTINGS);
 		MARS_DEBUG_LOG("Destroying display");
 		_DestroyDisplay(MARS_DISPLAY);
+		MARS_DEBUG_LOG("Destroying resource manager");
+		_DestroyResourceManager(MARS_RESOURCES);
 		MARS_FREE(MARS_GAME);
 		MARS_GAME = NULL;
 	}

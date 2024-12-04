@@ -7,8 +7,10 @@
 #include "mars/common.h"
 #include "mars/settings.h"
 #include "mars/display.h"
+#include "mars/resource.h"
 
 typedef struct {
+	ResourceManager* _resourceManager;
 	SettingsList* _settingsList;
 	Display* _display;
 } Game;
@@ -26,6 +28,7 @@ MARS_API void DestroyGame();
 MARS_API void UpdateGame();
 
 #define MARS_GAME _mars_g_game
+#define MARS_RESOURCES _mars_g_game->_resourceManager
 #define MARS_SETTINGS _mars_g_game->_settingsList
 #define MARS_DISPLAY _mars_g_game->_display
 #define MARS_WINDOW _mars_g_game->_display->_window
