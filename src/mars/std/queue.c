@@ -1,4 +1,5 @@
 #include "mars/std/queue.h"
+#include "mars/std/debug.h"
 
 size_t _queue_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
@@ -10,7 +11,10 @@ queue_t* _queue_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _queue_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	queue_t* qu = MARS_CALLOC(1, buffer_size);
-	if (!qu) { return NULL; }
+	if (!qu) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate queue buffer!");
+		return NULL; 
+	}
 	qu->_capacity = capacity;
 	qu->_element_size = element_size;
 	return qu;

@@ -1,4 +1,5 @@
 #include "mars/std/buffer.h"
+#include "mars/std/debug.h"
 
 buffer_t* _buffer_resize(buffer_t* _buf, size_t _new_capacity) {
 	if (_new_capacity == 0) {
@@ -19,7 +20,10 @@ buffer_t* buffer_create() {
 buffer_t* buffer_create_size(size_t _capacity) {
 	size_t buffer_size = offsetof(buffer_t, _buffer) + _capacity;
 	buffer_t* buf = MARS_CALLOC(1, buffer_size);
-	if (!buf) { return NULL; }
+	if (!buf) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate buffer_t buffer!");
+		return NULL; 
+	}
 	buf->_capacity = _capacity;
 	return buf;
 }

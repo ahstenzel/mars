@@ -1,4 +1,5 @@
 #include "mars/std/free_list.h"
+#include "mars/std/debug.h"
 
 size_t _free_list_buffer_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
@@ -10,9 +11,11 @@ size_t _free_list_buffer_size(size_t element_size, size_t capacity) {
 free_list_t* _free_list_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _free_list_buffer_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
-	//size_t object_size = offsetof(free_list_t, _buffer) + ((capacity/8)+1) + buffer_size;
 	free_list_t* list = MARS_CALLOC(buffer_size, 1);
-	if (!list) { return NULL; }
+	if (!list) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate free_list buffer!");
+		return NULL; 
+	}
 	list->_capacity = capacity;
 	list->_element_size = element_size;
 	return list;
@@ -102,7 +105,10 @@ free_list_it_t* _free_list_it(free_list_t* list) {
 	// Construct iterator
 	size_t buffer_size = sizeof(free_list_it_t);
 	free_list_it_t* it = MARS_CALLOC(buffer_size, 1);
-	if (!it) { return NULL; }
+	if (!it) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate buffer_t iterator!");
+		return NULL; 
+	}
 	it->index = SIZE_MAX;
 	it->_list = list;
 

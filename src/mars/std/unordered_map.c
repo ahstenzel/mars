@@ -1,4 +1,5 @@
 #include "mars/std/unordered_map.h"
+#include "mars/std/debug.h"
 
 size_t _umap_node_size(size_t element_size) {
 	size_t key_size = sizeof(_umap_key_t);
@@ -18,7 +19,10 @@ unordered_map_t* _umap_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _umap_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	unordered_map_t* umap = MARS_CALLOC(1, buffer_size);
-	if (!umap) { return NULL; }
+	if (!umap) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate unordered_map buffer!");
+		return NULL; 
+	}
 	umap->_capacity = capacity;
 	umap->_element_size = element_size;
 	memset(_umap_ctrl(umap, 0), _UMAP_EMPTY, capacity);
@@ -184,7 +188,10 @@ unordered_map_it_t* _umap_it(unordered_map_t* umap) {
 	// Construct iterator
 	size_t buffer_size = sizeof(unordered_map_it_t);
 	unordered_map_it_t* it = MARS_CALLOC(1, buffer_size);
-	if (!it) { return NULL; }
+	if (!it) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate unordered_map iterator!");
+		return NULL; 
+	}
 	it->_index = SIZE_MAX;
 	it->_umap = umap;
 	

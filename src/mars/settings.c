@@ -11,7 +11,7 @@ SettingsList* GenerateDefaultSettings() {
 
 	settingsList = MARS_CALLOC(1, sizeof(*settingsList));
 	if (!settingsList) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate settings buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate settings buffer!");
 		goto generate_default_settings_fail;
 	}
 
@@ -21,7 +21,7 @@ SettingsList* GenerateDefaultSettings() {
 	// Populate display settings
 	displaySettingsList = MARS_CALLOC(1, sizeof(*displaySettingsList));
 	if (!displaySettingsList) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate settings buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate settings buffer!");
 		goto generate_default_settings_fail;
 	}
 	displaySettingsList->_fullscreen = false;

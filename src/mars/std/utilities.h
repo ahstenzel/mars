@@ -73,6 +73,25 @@ _MARS_ID_TYPE _mars_id_generate();
 
 
 //----------------------------------------------------------------------------------
+// CRC32 validation
+//----------------------------------------------------------------------------------
+
+uint32_t CRC32Calculate(const void* _data, size_t _length, uint32_t _previousCRC);
+
+extern const uint32_t crc32Lookup[256];
+
+//----------------------------------------------------------------------------------
+// String functions
+//----------------------------------------------------------------------------------
+
+/// @brief Reimplement strdup using custom allocators.
+char* _mars_strdup(const char* _str);
+
+/// @brief Reimplement strndup using custom allocators.
+char* _mars_strndup(const char* _str, size_t _size);
+
+
+//----------------------------------------------------------------------------------
 // BAMS functions
 //----------------------------------------------------------------------------------
 

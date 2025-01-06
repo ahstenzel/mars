@@ -68,29 +68,50 @@ void _mars_dbg_log_write(const unsigned char level, const char* func, char* fmt,
 
 
 //----------------------------------------------------------------------------------
+// Assertions
+//----------------------------------------------------------------------------------
+
+#if defined(MARS_DEBUG)
+
+int _mars_dbg_assert(const char* expr, const char* file, int line, const char* func, char* fmt, ...);
+
+#define MARS_ASSERTM(x, s, ...) ((x) || _mars_dbg_assert(#x, __FILE__, __LINE__, MARS_STR_FUNC, s, ##__VA_ARGS__))
+
+#define MARS_ASSERT(x) ((x) || _mars_dbg_assert(#x, __FILE__, __LINE__, MARS_STR_FUNC, ""))
+
+#else
+
+#define MARS_ASSERTM(x, s, ...) ((void)0)
+
+#define MARS_ASSERT(x) ((void)0)
+
+#endif
+
+
+//----------------------------------------------------------------------------------
 // Return codes
 //----------------------------------------------------------------------------------
 
 // Code definitions
-#define MARS_RETURN_OK						0		// Return code for successful execution.
-#define MARS_RETURN_CRITICAL_ERROR			1		// Return code for an unhandled critical error.
-#define MARS_RETURN_GENERIC_ERROR			2		// Return code for an unspecified error.
-#define MARS_RETURN_INVALID_REFERENCE		3		// Return code for an invalid pointer.
-#define MARS_RETURN_INVALID_ID				4		// Return code for an invalid unique ID.
-#define MARS_RETURN_INVALID_PARAMETER		5		// Return code for an improperly formatted function parameter.
-#define MARS_RETURN_CONTAINER_FAILURE		6		// Return code for an internal failure in data containers.
-#define MARS_RETURN_RESOURCE_FAILURE		7		// Return code for an internal failure in the resource management system.
-#define MARS_RETURN_VULKAN_FAILURE			8		// Return code for an error in a vulkan internal function.
-#define MARS_RETURN_FILESYSTEM_FAILURE		9		// Return code for a filesystem related error.
+#define MARS_RETURN_CODE_OK						0		// Return code for successful execution.
+#define MARS_RETURN_CODE_CRITICAL_ERROR			1		// Return code for an unhandled critical error.
+#define MARS_RETURN_CODE_GENERIC_ERROR			2		// Return code for an unspecified error.
+#define MARS_RETURN_CODE_INVALID_REFERENCE		3		// Return code for an invalid pointer.
+#define MARS_RETURN_CODE_INVALID_ID				4		// Return code for an invalid unique ID.
+#define MARS_RETURN_CODE_INVALID_PARAMETER		5		// Return code for an improperly formatted function parameter.
+#define MARS_RETURN_CODE_CONTAINER_FAILURE		6		// Return code for an internal failure in data containers.
+#define MARS_RETURN_CODE_RESOURCE_FAILURE		7		// Return code for an internal failure in the resource management system.
+#define MARS_RETURN_CODE_BACKEND_FAILURE		8		// Return code for an error in a render backend function.
+#define MARS_RETURN_CODE_FILESYSTEM_FAILURE		9		// Return code for a filesystem related error.
 
 // Global variables
 extern unsigned int _mars_g_return_code;	// Last recorded function return code.
 
 /// @brief Get the last recorded function return code.
-#define MARS_RETURN _mars_g_return_code
+#define MARS_RETURN_CODE _mars_g_return_code
 
 /// @brief Clear the last recorded function return code.
-#define MARS_RETURN_CLEAR _mars_g_return_code = MARS_RETURN_OK
+#define MARS_RETURN_CLEAR _mars_g_return_code = MARS_RETURN_CODE_OK
 
 /// @brief Record the current function return code.
 #define MARS_RETURN_SET(x) _mars_g_return_code = x
@@ -101,15 +122,16 @@ extern unsigned int _mars_g_return_code;	// Last recorded function return code.
 //----------------------------------------------------------------------------------
 
 // Code definitions
-#define MARS_ERROR_STATUS_NONE			0x00		// Mask for no errors.
-#define MARS_ERROR_STATUS_ALL			0xFF		// Mask for all errors.
-#define MARS_ERROR_STATUS_GENERIC		0x01		// Mask for uncategorized general error.
-#define MARS_ERROR_STATUS_BAD_ALLOC		0x02		// Mask for failed memory allocation.
-#define MARS_ERROR_STATUS_FILESYS		0x04		// Mask for filesystem error.
-#define MARS_ERROR_STATUS_RENDERER		0x08		// Mask for rendering error.
+#define MARS_ERROR_CODE_NONE			0x00		// Mask for no errors.
+#define MARS_ERROR_CODE_ALL				0xFF		// Mask for all errors.
+#define MARS_ERROR_CODE_GENERIC			0x01		// Mask for uncategorized general error.
+#define MARS_ERROR_CODE_BAD_ALLOC		0x02		// Mask for failed memory allocation.
+#define MARS_ERROR_CODE_FILESYS			0x04		// Mask for filesystem error.
+#define MARS_ERROR_CODE_RENDERER		0x08		// Mask for rendering error.
+#define MARS_ERROR_CODE_ASSERT			0x0F		// Mask for failed assertion.
 
 // Global variables
-extern unsigned char _mars_g_error_status_mask;  	// Mask for disabling certain error types
+extern unsigned char _mars_g_error_code_mask;  	// Mask for disabling certain error types
 
 /// @brief Raise the given error status and abort the program if they are not masked off.
 /// @param status Status code
@@ -119,7 +141,7 @@ void _mars_error_abort(unsigned int status);
 void _mars_print_stack();
 
 /// @brief Set the bitmask that defines which error codes should exit the program
-#define MARS_ERROR_SET_SEVERITY(x) _mars_g_error_status_mask = x
+#define MARS_ERROR_SET_SEVERITY(x) _mars_g_error_code_mask = x
 
 /// @brief Print an error message, then either exit the program (if the error type hasn't been masked), or set
 ///	@brief the global return code to indicate a critical unhandled error and continue execution.
@@ -129,7 +151,7 @@ void _mars_print_stack();
 #define MARS_ABORT(x, s, ...) { \
 	MARS_DEBUG_ERROR(s, ##__VA_ARGS__); \
 	_mars_error_abort(x); \
-	MARS_RETURN_SET(MARS_RETURN_CRITICAL_ERROR); \
+	MARS_RETURN_SET(MARS_RETURN_CODE_CRITICAL_ERROR); \
 }
 
 #endif // MARS_DEBUG_H

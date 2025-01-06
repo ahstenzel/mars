@@ -1,4 +1,5 @@
 #include "mars/std/vector.h"
+#include "mars/std/debug.h"
 
 size_t _vec_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
@@ -10,7 +11,10 @@ vector_t* _vec_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _vec_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	vector_t* vec = MARS_CALLOC(1, buffer_size);
-	if (!vec) { return NULL; }
+	if (!vec) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate vector buffer!");
+		return NULL; 
+	}
 	vec->_capacity = capacity;
 	vec->_element_size = element_size;
 	return vec;

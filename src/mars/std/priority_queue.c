@@ -1,4 +1,5 @@
 #include "mars/std/priority_queue.h"
+#include "mars/std/debug.h"
 
 size_t _priority_queue_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
@@ -12,7 +13,10 @@ priority_queue_t* _priority_queue_factory(size_t element_size, size_t capacity) 
 	size_t buffer_size = _priority_queue_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	priority_queue_t* qu = MARS_CALLOC(1, buffer_size);
-	if (!qu) { return NULL; }
+	if (!qu) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate priority_queue buffer!");
+		return NULL; 
+	}
 	qu->_capacity = capacity;
 	qu->_element_size = element_size;
 	return qu;
@@ -191,7 +195,10 @@ priority_queue_it_t* _priority_queue_it(priority_queue_t* qu, bool begin) {
 	// Construct iterator
 	size_t buffer_size = sizeof(priority_queue_it_t);
 	priority_queue_it_t* it = MARS_CALLOC(1, buffer_size);
-	if (!it) { return NULL; }
+	if (!it) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate buffer_t iterator!");
+		return NULL; 
+	}
 
 	// Find first valid entry in map
 	it->_qu = qu;
@@ -210,7 +217,10 @@ priority_queue_it_t* _priority_queue_it_value(priority_queue_t* qu, priority_que
 	// Construct iterator
 	size_t buffer_size = sizeof(priority_queue_it_t);
 	priority_queue_it_t* it = MARS_CALLOC(1, buffer_size);
-	if (!it) { return NULL; }
+	if (!it) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate buffer_t iterator!");
+		return NULL; 
+	}
 	it->_index = _priority_queue_find_index(qu, value, NULL);
 	if (it->_index == qu->_capacity) {
 		MARS_FREE(it);

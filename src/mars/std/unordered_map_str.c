@@ -1,4 +1,5 @@
 #include "mars/std/unordered_map_str.h"
+#include "mars/std/debug.h"
 
 size_t _umap_str_node_size(size_t element_size) {
 	size_t key_size = sizeof(_umap_str_key_t);
@@ -18,7 +19,10 @@ unordered_map_str_t* _umap_str_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _umap_str_size(element_size, capacity);
 	if (buffer_size == 0) { return NULL; }
 	unordered_map_str_t* umap_str = MARS_CALLOC(1, buffer_size);
-	if (!umap_str) { return NULL; }
+	if (!umap_str) {
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate unordered_map_str buffer!");
+		return NULL; 
+	}
 	umap_str->_capacity = capacity;
 	umap_str->_element_size = element_size;
 	memset(_umap_str_ctrl(umap_str, 0), _UMAP_STR_EMPTY, capacity);
@@ -65,7 +69,7 @@ _umap_str_hash_t _umap_str_hash(_umap_str_key_t key) {
 	return hash;
 }
 
-void* _umap_str_insert(unordered_map_str_t** umap_str, _umap_str_key_t key, void* data) {
+void* _umap_str_insert(unordered_map_str_t** umap_str, const _umap_str_key_t key, void* data) {
 	// Error check
 	if (!umap_str || !(*umap_str)) { return NULL; }
 	unordered_map_str_t* _umap_str = *umap_str;
@@ -92,11 +96,13 @@ void* _umap_str_insert(unordered_map_str_t** umap_str, _umap_str_key_t key, void
 			// Copy the key to a new buffer
 			size_t dest_size = strlen(key) + 1;
 			_umap_str_key_t dest = MARS_MALLOC(dest_size);
-			if (!dest) { return NULL; }
+			if (!dest) { 
+				MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate unordered_map_str key buffer!");
+				return NULL; 
+			}
 			strcpy_s(dest, dest_size, key);
 
 			// Save the key to the start of the node block
-			//_umap_str_key_t* addr = _umap_str_node_key(_umap_str, pos);
 			memcpy_s(_umap_str_node_key(_umap_str, pos), sizeof(_umap_str_key_t), &dest, sizeof(_umap_str_key_t));
 
 			// Save lower 8 bits of hash to the control block
@@ -122,7 +128,7 @@ void* _umap_str_insert(unordered_map_str_t** umap_str, _umap_str_key_t key, void
 	return _umap_str_node_data(_umap_str, pos);
 }
 
-void _umap_str_delete(unordered_map_str_t* umap_str, _umap_str_key_t key) {
+void _umap_str_delete(unordered_map_str_t* umap_str, const _umap_str_key_t key) {
 	// Error check
 	if (!umap_str) { return; }
 
@@ -155,7 +161,7 @@ void _umap_str_delete(unordered_map_str_t* umap_str, _umap_str_key_t key) {
 	}
 }
 
-void* _umap_str_find(unordered_map_str_t* umap_str, _umap_str_key_t key) {
+void* _umap_str_find(unordered_map_str_t* umap_str, const _umap_str_key_t key) {
 	// Error check
 	if (!umap_str) { return NULL; }
 
@@ -193,9 +199,11 @@ unordered_map_str_it_t* _umap_str_it(unordered_map_str_t* umap_str) {
 
 	// Construct iterator
 	size_t buffer_size = sizeof(unordered_map_str_it_t);
-	unordered_map_str_it_t* it = MARS_MALLOC(buffer_size);
-	if (!it) { return NULL; }
-	memset(it, 0, buffer_size);
+	unordered_map_str_it_t* it = MARS_CALLOC(1, buffer_size);
+	if (!it) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate unordered_map_str iterator!");
+		return NULL; 
+	}
 	it->_index = SIZE_MAX;
 	it->_umap_str = umap_str;
 	

@@ -9,7 +9,7 @@ Display* _CreateDisplay(DisplayDesc _desc) {
 	// Error check
 	if (!_desc.name) {
 		MARS_DEBUG_WARN("NULL display name!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto create_display_fail;
 	}
 
@@ -17,7 +17,7 @@ Display* _CreateDisplay(DisplayDesc _desc) {
 	MARS_DEBUG_LOG("Allocating display");
 	display = MARS_CALLOC(1, sizeof(*display));
 	if (!display) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate display structure!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate display structure!");
 		goto create_display_fail;
 	}
 
@@ -37,7 +37,7 @@ Display* _CreateDisplay(DisplayDesc _desc) {
 	int backend = _GetRendererBackend();
 	if (backend < 0) {
 		MARS_DEBUG_WARN("Failed to determine renderer backend!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		goto create_display_fail;
 	}
 	else switch(backend) {

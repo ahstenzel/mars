@@ -19,7 +19,7 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	// Allocate renderer
 	renderer = MARS_CALLOC(1, sizeof(*renderer));
 	if (!renderer) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate renderer structure!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate renderer structure!");
 		goto renderer_vk_create_fail;
 	}
 	renderer->_framebufferResized = false;
@@ -31,7 +31,7 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	// Initialize Vulkan
 	MARS_DEBUG_LOG("Initializing Vulkan");
 	renderer->_instance = _RendererVKCreateInstance();
-	if (MARS_RETURN != MARS_RETURN_OK) {
+	if (MARS_RETURN_CODE != MARS_RETURN_CODE_OK) {
 		MARS_DEBUG_WARN("Failed to initalize render backend!");
 		goto renderer_vk_create_fail;
 	}
@@ -84,12 +84,12 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	size_t vertexShaderSize = base64Decode(_SHADER_BIN_DEFAULT_VERT_SPV, NULL, 0);
 	vertexShaderCode = MARS_MALLOC(vertexShaderSize);
 	if (!vertexShaderCode) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate default vertex shader code buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate default vertex shader code buffer!");
 		goto renderer_vk_create_fail;
 	}
 	if (base64Decode(_SHADER_BIN_DEFAULT_VERT_SPV, vertexShaderCode, vertexShaderSize) != vertexShaderSize) {
 		MARS_DEBUG_WARN("Failed to decode vertex shader code!");
-		MARS_RETURN_SET(MARS_RETURN_GENERIC_ERROR);
+		MARS_RETURN_SET(MARS_RETURN_CODE_GENERIC_ERROR);
 		goto renderer_vk_create_fail;
 	}
 	VkShaderModule vertexShaderModule = _RendererVKCreateShaderModule(&renderer->_device, vertexShaderCode, (uint32_t)vertexShaderSize);
@@ -100,12 +100,12 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	size_t fragmentShaderSize = base64Decode(_SHADER_BIN_DEFAULT_FRAG_SPV, NULL, 0);
 	fragmentShaderCode = MARS_MALLOC(fragmentShaderSize);
 	if (!fragmentShaderCode) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate default fragment shader code buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate default fragment shader code buffer!");
 		goto renderer_vk_create_fail;
 	}
 	if (base64Decode(_SHADER_BIN_DEFAULT_FRAG_SPV, fragmentShaderCode, fragmentShaderSize) != fragmentShaderSize) {
 		MARS_DEBUG_WARN("Failed to decode fragment shader code!");
-		MARS_RETURN_SET(MARS_RETURN_GENERIC_ERROR);
+		MARS_RETURN_SET(MARS_RETURN_CODE_GENERIC_ERROR);
 		goto renderer_vk_create_fail;
 	}
 	VkShaderModule fragmentShaderModule = _RendererVKCreateShaderModule(&renderer->_device, fragmentShaderCode, (uint32_t)fragmentShaderSize);
@@ -178,7 +178,7 @@ void _RendererVKUpdate(RendererVulkan* _renderer) {
 		return;
 	}
 	else if (res != VK_SUCCESS && res != VK_SUBOPTIMAL_KHR) {
-		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to acquire next swap chain image!");
+		MARS_ABORT(MARS_ERROR_CODE_RENDERER, "Failed to acquire next swap chain image!");
 		goto renderer_vk_update_fail;
 	}
 	if (_renderer->_backFences[imageIndex] != VK_NULL_HANDLE) {
@@ -202,7 +202,7 @@ void _RendererVKUpdate(RendererVulkan* _renderer) {
 	vkResetFences(_renderer->_device, 1, &_renderer->_frontFences[currentFrame]);
 	res = vkQueueSubmit(_renderer->_drawingQueue, 1, &submitInfo, _renderer->_frontFences[currentFrame]);
 	if (res != VK_SUCCESS) {
-		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to submit draw command buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_RENDERER, "Failed to submit draw command buffer!");
 		goto renderer_vk_update_fail;
 	}
 
@@ -223,7 +223,7 @@ void _RendererVKUpdate(RendererVulkan* _renderer) {
 		_RendererVKRecreateSwapchain(_renderer, MARS_WINDOW);
 	}
 	else if (res != VK_SUCCESS) {
-		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to present swap chain image!");
+		MARS_ABORT(MARS_ERROR_CODE_RENDERER, "Failed to present swap chain image!");
 		goto renderer_vk_update_fail;
 	}
 	currentFrame = (currentFrame + 1) % _renderer->_maxFrames;
@@ -275,18 +275,18 @@ VkInstance _RendererVKCreateInstance() {
 	uint32_t numExtensions = 0;
 	const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&numExtensions);
 	if (!glfw_extensions) {
-		MARS_ABORT(MARS_ERROR_STATUS_RENDERER, "Failed to get required extensions!");
+		MARS_ABORT(MARS_ERROR_CODE_RENDERER, "Failed to get required extensions!");
 		goto renderer_vk_create_instance_fail;
 	}
 	extensions = MARS_MALLOC(numExtensions * sizeof(*extensions));
 	if (!extensions) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate extension name buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate extension name buffer!");
 		goto renderer_vk_create_instance_fail;
 	}
 	for(size_t i = 0; i < numExtensions; ++i) {
-		extensions[i] = _strdup(glfw_extensions[i]);
+		extensions[i] = _mars_strdup(glfw_extensions[i]);
 		if (!extensions[i]) {
-			MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate extension name string (%d)!", (int)i);
+			MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate extension name string (%d)!", (int)i);
 			goto renderer_vk_create_instance_fail;
 		}
 	}
@@ -294,9 +294,9 @@ VkInstance _RendererVKCreateInstance() {
 	// Get optional extensions
 	#if defined(MARS_DEBUG)
 	const char** new_extensions = MARS_REALLOC(extensions, (numExtensions + 1) * sizeof(*extensions));
-	new_extensions[numExtensions] = _strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	new_extensions[numExtensions] = _mars_strdup(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	if (!new_extensions[numExtensions]) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate debug extension name string!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate debug extension name string!");
 		goto renderer_vk_create_instance_fail;
 	}
 	numExtensions++;
@@ -338,7 +338,7 @@ VkInstance _RendererVKCreateInstance() {
 	VkResult res;
 	if ((res = vkCreateInstance(&instanceCreateInfo, VK_NULL_HANDLE, &instance)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating instance! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 
 renderer_vk_create_instance_fail:
@@ -361,30 +361,30 @@ VkDevice _RendererVKCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _nu
 	// Error check
 	if (!_physicalDevice) {
 		MARS_DEBUG_WARN("Invalid physical device reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_create_device_fail;
 	}
 	if (!_queueFamilyProperties) {
 		MARS_DEBUG_WARN("Invalid queue device properties reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_create_device_fail;
 	}
 
 	// Populate creation info structs
 	queuePriorities = MARS_MALLOC(_numQueueFamily * sizeof(*queuePriorities));
 	if (!queuePriorities) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue priorities double buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate queue priorities double buffer!");
 		goto renderer_vk_create_device_fail;
 	}
 	deviceQueueCreateInfo = MARS_MALLOC(_numQueueFamily * sizeof(*deviceQueueCreateInfo));
 	if (!deviceQueueCreateInfo) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue creation info buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate queue creation info buffer!");
 		goto renderer_vk_create_device_fail;
 	}
 	for(uint32_t i=0; i<_numQueueFamily; ++i) {
 		queuePriorities[i] = MARS_MALLOC(_queueFamilyProperties[i].queueCount * sizeof(*queuePriorities[i]));
 		if (!queuePriorities[i]) {
-			MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue priorities buffer (%d)!", (int)i);
+			MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate queue priorities buffer (%d)!", (int)i);
 			goto renderer_vk_create_device_fail;
 		}
 		for(uint32_t j=0; j<_queueFamilyProperties[i].queueCount; ++j) {
@@ -423,7 +423,7 @@ VkDevice _RendererVKCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _nu
 	VkResult res;
 	if ((res = vkCreateDevice(*_physicalDevice, &deviceCreateInfo, VK_NULL_HANDLE, &device)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating device! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_create_device_fail;
 	}
 
@@ -450,7 +450,7 @@ uint32_t _RendererVKGetPhysicalDeviceNumber(VkInstance* _instance) {
 	// Error check
 	if (!_instance) {
 		MARS_DEBUG_WARN("Invalid vulkan instance!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
 
@@ -459,7 +459,7 @@ uint32_t _RendererVKGetPhysicalDeviceNumber(VkInstance* _instance) {
 	uint32_t physicalDeviceNumber = 0;
 	if ((res = vkEnumeratePhysicalDevices(*_instance, &physicalDeviceNumber, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating physical devices! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		return 0;
 	}
 	return physicalDeviceNumber;
@@ -472,19 +472,19 @@ VkPhysicalDevice* _RendererVKGetPhysicalDevices(VkInstance* _instance, uint32_t 
 	// Error check
 	if (!_instance) {
 		MARS_DEBUG_WARN("Invalid vulkan instance!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_physical_devices_fail;
 	}
 	if (_numDevices == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		goto renderer_vk_get_physical_devices_fail;
 	}
 
 	// Allocate buffers
 	physicalDevices = MARS_MALLOC(_numDevices * sizeof(*physicalDevices));
 	if (!physicalDevices) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device array!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate physical device array!");
 		goto renderer_vk_get_physical_devices_fail;
 	}
 
@@ -492,7 +492,7 @@ VkPhysicalDevice* _RendererVKGetPhysicalDevices(VkInstance* _instance, uint32_t 
 	VkResult res;
 	if ((res = vkEnumeratePhysicalDevices(*_instance, &_numDevices, physicalDevices)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving physical devices! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_get_physical_devices_fail;
 	}
 	return physicalDevices;
@@ -516,34 +516,34 @@ uint32_t _RendererVKGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevice
 	// Error check
 	if (!_physicalDevices) {
 		MARS_DEBUG_WARN("Invalid physical device buffer!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	if (_numDevices == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 
 	// Allocate buffers
 	physicalDeviceProperties = MARS_MALLOC(_numDevices * sizeof(*physicalDeviceProperties));
 	if (!physicalDeviceProperties) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device property buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate physical device property buffer!");
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	physicalDeviceMemoryProperties = MARS_MALLOC(_numDevices * sizeof(*physicalDeviceMemoryProperties));
 	if (!physicalDeviceMemoryProperties) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate physical device memory property buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate physical device memory property buffer!");
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	discreteGPUIndices = MARS_MALLOC(_numDevices * sizeof(*discreteGPUIndices));
 	if (!discreteGPUIndices) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate discrete GPU index buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate discrete GPU index buffer!");
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 	integratedGPUIndices = MARS_MALLOC(_numDevices * sizeof(*integratedGPUIndices));
 	if (!integratedGPUIndices) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate integrated GPU index buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate integrated GPU index buffer!");
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
 
@@ -593,7 +593,7 @@ uint32_t _RendererVKGetPhysicalDeviceTotalMemory(VkPhysicalDeviceMemoryPropertie
 	// Error check
 	if (!_properties) {
 		MARS_DEBUG_WARN("Invalid physical device proeprty buffer!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
 
@@ -613,7 +613,7 @@ uint32_t _RendererVKGetQueueFamilyNumber(VkPhysicalDevice* _physicalDevice) {
 	// Error check
 	if (!_physicalDevice) {
 		MARS_DEBUG_WARN("Invalid physical device reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
 
@@ -630,19 +630,19 @@ VkQueueFamilyProperties* _RendererVKGetQueueFamilyProperties(VkPhysicalDevice* _
 	// Error check
 	if (!_physicalDevice) {
 		MARS_DEBUG_WARN("Invalid physical device reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_queue_family_properties_fail;
 	}
 	if (_numQueueFamily == 0) {
 		MARS_DEBUG_WARN("Number of specified devices must be greater than zero!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		goto renderer_vk_get_queue_family_properties_fail;
 	}
 
 	// Retrieve queue info
 	queueFamilyProperties = MARS_MALLOC(_numQueueFamily * sizeof(*queueFamilyProperties));
 	if (!queueFamilyProperties) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate queue family property buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate queue family property buffer!");
 		goto renderer_vk_get_queue_family_properties_fail;
 	}
 	vkGetPhysicalDeviceQueueFamilyProperties(*_physicalDevice, &_numQueueFamily, queueFamilyProperties);
@@ -668,14 +668,14 @@ uint32_t _RendererVKGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _qu
 	// Error check
 	if (!_queueFamilyProperties) {
 		MARS_DEBUG_WARN("Invalid queue family properties reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_best_graphics_queue_family_index_fail;
 	}
 
 	// Allocate index buffer
 	graphicsQueueFamilyIndices = MARS_MALLOC(_numQueueFamily * sizeof(*graphicsQueueFamilyIndices));
 	if (!graphicsQueueFamilyIndices) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate graphics queue family index buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate graphics queue family index buffer!");
 		goto renderer_vk_get_best_graphics_queue_family_index_fail;
 	}
 
@@ -705,7 +705,7 @@ uint32_t _RendererVKGetGraphicsQueueMode(VkQueueFamilyProperties* _queueFamilyPr
 	// Error check
 	if (!_queueFamilyProperties) {
 		MARS_DEBUG_WARN("Invalid queue family properties reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 2;
 	}
 
@@ -723,7 +723,7 @@ VkQueue _RendererVKGetDrawingQueue(VkDevice* _device, uint32_t _graphicsQueueFam
 	// Error check
 	if (!_device) {
 		MARS_DEBUG_WARN("Invalid device reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return drawingQueue;
 	}
 
@@ -739,12 +739,12 @@ VkQueue _RendererVKGetPresentingQueue(VkDevice* _device, uint32_t _graphicsQueue
 	// Error check
 	if (!_device) {
 		MARS_DEBUG_WARN("Invalid device reference!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return presentingQueue;
 	}
 	if (_graphicsQueueMode > 1) {
 		MARS_DEBUG_WARN("Invalid graphics queue mode!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_PARAMETER);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		return presentingQueue;
 	}
 
@@ -759,7 +759,7 @@ VkSurfaceKHR _RendererVKCreateSurface(GLFWwindow* _window, VkInstance* _instance
 	VkResult res;
 	if ((res = glfwCreateWindowSurface(*_instance, _window, VK_NULL_HANDLE, &surface)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating window surface! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return surface;
 }
@@ -774,7 +774,7 @@ VkBool32 _RendererVKGetSurfaceSupport(VkSurfaceKHR* _surface, VkPhysicalDevice* 
 	VkResult res;
 	if ((res = vkGetPhysicalDeviceSurfaceSupportKHR(*_physicalDevice, _graphicsQueueFamilyIdx, *_surface, &surfaceSupport)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error getting surface support! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return surfaceSupport;
 }
@@ -785,13 +785,13 @@ VkSurfaceCapabilitiesKHR _RendererVKGetSurfaceCapabilities(VkSurfaceKHR* _surfac
 	VkResult res;
 	if ((res = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(*_physicalDevice, *_surface, &surfaceCapabilities)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error getting surface capabilities! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return surfaceCapabilities;
 }
 
 VkSurfaceFormatKHR _RendererVKGetBestSurfaceFormat(VkSurfaceKHR* _surface, VkPhysicalDevice* _physicalDevice) {
-	MARS_RETURN;
+	MARS_RETURN_CODE;
 	uint32_t numSurfaceFormat = 0;
 	VkSurfaceFormatKHR* surfaceFormats = NULL;
 	VkSurfaceFormatKHR bestSurfaceFormat = { 0 };
@@ -800,19 +800,19 @@ VkSurfaceFormatKHR _RendererVKGetBestSurfaceFormat(VkSurfaceKHR* _surface, VkPhy
 	VkResult res;
 	if ((res = vkGetPhysicalDeviceSurfaceFormatsKHR(*_physicalDevice, *_surface, &numSurfaceFormat, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating surface formats! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_get_best_surface_format_fail;
 	}
 
 	// Get all surface formats
 	surfaceFormats = MARS_MALLOC(numSurfaceFormat * sizeof(*surfaceFormats));
 	if (!surfaceFormats) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate surface formats buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate surface formats buffer!");
 		goto renderer_vk_get_best_surface_format_fail;
 	}
 	if ((res = vkGetPhysicalDeviceSurfaceFormatsKHR(*_physicalDevice, *_surface, &numSurfaceFormat, surfaceFormats)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving surface formats! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_get_best_surface_format_fail;
 	}
 	bestSurfaceFormat = surfaceFormats[0];
@@ -833,19 +833,19 @@ VkPresentModeKHR _RendererVKGetBestPresentMode(VkSurfaceKHR* _surface, VkPhysica
 	// Get number of present modes
 	if ((res = vkGetPhysicalDeviceSurfacePresentModesKHR(*_physicalDevice, *_surface, &numPresentMode, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating present modes! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_get_best_present_mode_fail;
 	}
 
 	// Get present modes
 	presentModes = MARS_MALLOC(numPresentMode * sizeof(*presentModes));
 	if (!presentModes) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate present modes buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate present modes buffer!");
 		goto renderer_vk_get_best_present_mode_fail;
 	}
 	if ((res = vkGetPhysicalDeviceSurfacePresentModesKHR(*_physicalDevice, *_surface, &numPresentMode, presentModes)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error retrieving present modes! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		goto renderer_vk_get_best_present_mode_fail;
 	}
 
@@ -927,7 +927,7 @@ VkSwapchainKHR _RendererVKCreateSwapchain(VkDevice* _device, VkSurfaceKHR* _surf
 	VkResult res;
 	if ((res = vkCreateSwapchainKHR(*_device, &swapchainCreateInfo, VK_NULL_HANDLE, &swapchain)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating swapchain! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return swapchain;
 }
@@ -942,7 +942,7 @@ uint32_t _RendererVKGetSwapchainImageNumber(VkDevice* _device, VkSwapchainKHR* _
 	VkResult res;
 	if ((res = vkGetSwapchainImagesKHR(*_device, *_swapchain, &numSwapchainImages, VK_NULL_HANDLE)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error enumerating swapchain images! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		return 0;
 	}
 	return numSwapchainImages;
@@ -952,13 +952,13 @@ VkImage* _RendererVKGetSwapchainImages(VkDevice* _device, VkSwapchainKHR* _swapc
 	MARS_RETURN_CLEAR;
 	VkImage* swapchainImages = MARS_MALLOC(_numSwapchainImages * sizeof(*swapchainImages));
 	if (!swapchainImages) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate swapchain images buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate swapchain images buffer!");
 		return NULL;
 	}
 	VkResult res;
 	if ((res = vkGetSwapchainImagesKHR(*_device, *_swapchain, &_numSwapchainImages, swapchainImages)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error populating swapchain images! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 		return NULL;
 	}
 	return swapchainImages;
@@ -989,12 +989,12 @@ VkImageView* _RendererVKCreateImageViews(VkDevice* _device, VkImage** _images, V
 
 	imageViewCreateInfo = MARS_MALLOC(_numImages * sizeof(*imageViewCreateInfo));
 	if (!imageViewCreateInfo) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate image view create info buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate image view create info buffer!");
 		goto renderer_vk_create_image_views_fail;
 	}
 	imageViews = MARS_MALLOC(_numImages * sizeof(*imageViews));
 	if (!imageViews) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate image view buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate image view buffer!");
 		goto renderer_vk_create_image_views_fail;
 	}
 	for(uint32_t i = 0; i < _numImages; ++i) {
@@ -1010,7 +1010,7 @@ VkImageView* _RendererVKCreateImageViews(VkDevice* _device, VkImage** _images, V
 		VkResult res;
 		if ((res = vkCreateImageView(*_device, &(imageViewCreateInfo[i]), VK_NULL_HANDLE, &(imageViews[i]))) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating swapchain images! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_create_image_views_fail;
 		}
 	}
@@ -1088,7 +1088,7 @@ VkRenderPass _RendererVKCreateRenderPass(VkDevice* _device, VkSurfaceFormatKHR* 
 	VkResult res;
 	if ((res = vkCreateRenderPass(*_device, &renderPassCreateInfo, VK_NULL_HANDLE, &renderPass)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating render pass! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return renderPass;
 }
@@ -1105,12 +1105,12 @@ VkFramebuffer* _RendererVKCreateFramebuffers(VkDevice *_device, VkRenderPass* _r
 	// Allocate framebuffer arrays
 	framebufferCreateInfo = MARS_MALLOC(_numImageViews * sizeof(*framebufferCreateInfo));
 	if (!framebufferCreateInfo) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate framebuffer create info buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate framebuffer create info buffer!");
 		goto renderer_vk_create_framebuffers_fail;
 	}
 	framebuffers = MARS_MALLOC(_numImageViews * sizeof((framebuffers)));
 	if (!framebuffers) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate framebuffer buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate framebuffer buffer!");
 		goto renderer_vk_create_framebuffers_fail;
 	}
 
@@ -1129,7 +1129,7 @@ VkFramebuffer* _RendererVKCreateFramebuffers(VkDevice *_device, VkRenderPass* _r
 		VkResult res;
 		if ((res = vkCreateFramebuffer(*_device, &framebufferCreateInfo[i], VK_NULL_HANDLE, &framebuffers[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating framebuffer! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_create_framebuffers_fail;
 		}
 	}
@@ -1158,7 +1158,7 @@ char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	// Validate inputs
 	if (!_shaderSize) {
 		MARS_DEBUG_WARN("NULL file size destination pointer!");
-		MARS_RETURN_SET(MARS_RETURN_INVALID_REFERENCE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_shader_code_fail;
 	}
 
@@ -1166,7 +1166,7 @@ char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	fp = fopen(_filename, "rb+");
 	if (!fp) {
 		MARS_DEBUG_WARN("Failed to open shader file! (%s)", _filename);
-		MARS_RETURN_SET(MARS_RETURN_FILESYSTEM_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_FILESYSTEM_FAILURE);
 		goto renderer_vk_get_shader_code_fail;
 	}
 
@@ -1178,7 +1178,7 @@ char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 	// Read shader code
 	shaderCode = MARS_MALLOC((*_shaderSize) * sizeof(*shaderCode));
 	if (!shaderCode) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate shader code buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate shader code buffer!");
 		goto renderer_vk_get_shader_code_fail;
 	}
 	fread(shaderCode, sizeof(*shaderCode), *_shaderSize, fp);
@@ -1209,7 +1209,7 @@ VkShaderModule _RendererVKCreateShaderModule(VkDevice* _device, char* _shaderCod
 	VkResult res;
 	if ((res = vkCreateShaderModule(*_device, &shaderModuleCreateInfo, VK_NULL_HANDLE, &shaderModule)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating shader module! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return shaderModule;
 }
@@ -1234,7 +1234,7 @@ VkPipelineLayout _RendererVKCreatePipelineLayout(VkDevice* _device) {
 	VkResult res;
 	if ((res = vkCreatePipelineLayout(*_device, &pipelineLayoutCreateInfo, VK_NULL_HANDLE, &pipelineLayout)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating pipeline layout! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return pipelineLayout;
 }
@@ -1341,7 +1341,7 @@ VkPipeline _RendererVKCreateGraphicsPipeline(VkDevice* _device, VkPipelineLayout
 	VkResult res;
 	if ((res = vkCreateGraphicsPipelines(*_device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, VK_NULL_HANDLE, &graphicsPipeline)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating graphics pipeline! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return graphicsPipeline;
 }
@@ -1484,7 +1484,7 @@ VkCommandPool _RendererVKCreateCommandPool(VkDevice* _device, uint32_t _queueFam
 	VkResult res;
 	if ((res = vkCreateCommandPool(*_device, &commandPoolCreateInfo, VK_NULL_HANDLE, &commandPool)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating command pool! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return commandPool;
 }
@@ -1505,12 +1505,12 @@ VkCommandBuffer* _RendererVKCreateCommandBuffers(VkDevice* _device, VkCommandPoo
 
 	VkCommandBuffer* commandBuffers = MARS_MALLOC(_numCommandBuffers * sizeof(*commandBuffers));
 	if (!commandBuffers) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate command buffers!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate command buffers!");
 	}
 	VkResult res;
 	if ((res = vkAllocateCommandBuffers(*_device, &commandBufferAllocateInfo, commandBuffers)) != VK_SUCCESS) {
 		MARS_DEBUG_WARN("Vulkan error creating command buffers! (%d)", (int)res);
-		MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
 	return commandBuffers;
 }
@@ -1532,12 +1532,12 @@ void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRender
 
 	commandBufferBeginInfos = MARS_MALLOC(_numCommandBuffers * sizeof(*commandBufferBeginInfos));
 	if (!commandBufferBeginInfos) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate command buffer info buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate command buffer info buffer!");
 		goto renderer_vk_record_command_buffers_fail;
 	}
 	renderPassBeginInfos = MARS_MALLOC(_numCommandBuffers * sizeof(*renderPassBeginInfos));
 	if (!renderPassBeginInfos) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate render pass info buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate render pass info buffer!");
 		goto renderer_vk_record_command_buffers_fail;
 	}
 
@@ -1558,7 +1558,7 @@ void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRender
 		VkResult res;
 		if ((res = vkBeginCommandBuffer((*_commandBuffers)[i], &commandBufferBeginInfos[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error starting command submission! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_record_command_buffers_fail;
 		}
 		vkCmdBeginRenderPass((*_commandBuffers)[i], &renderPassBeginInfos[i], VK_SUBPASS_CONTENTS_INLINE);
@@ -1567,7 +1567,7 @@ void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRender
 		vkCmdEndRenderPass((*_commandBuffers)[i]);
 		if ((res = vkEndCommandBuffer((*_commandBuffers)[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error ending command submission! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_record_command_buffers_fail;
 		}
 	}
@@ -1588,14 +1588,14 @@ VkSemaphore* _RendererVKCreateSemaphores(VkDevice* _device, uint32_t _maxFrames)
 	};
 	semaphores = MARS_MALLOC(_maxFrames * sizeof(*semaphores));
 	if (!semaphores) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate semaphores buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate semaphores buffer!");
 		goto renderer_vk_create_semaphores_fail;
 	}
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		VkResult res;
 		if ((res = vkCreateSemaphore(*_device, &semaphoreCreateInfo, VK_NULL_HANDLE, &semaphores[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating semaphore! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_create_semaphores_fail;
 		}
 	}
@@ -1624,14 +1624,14 @@ VkFence* _RendererVKCreateFences(VkDevice* _device, uint32_t _maxFrames) {
 	};
 	fences = MARS_MALLOC(_maxFrames * sizeof(*fences));
 	if (!fences) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate fences buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate fences buffer!");
 		goto renderer_vk_create_fences_fail;
 	}
 	for(uint32_t i = 0; i < _maxFrames; ++i) {
 		VkResult res;
 		if ((res = vkCreateFence(*_device, &fenceCreateInfo, VK_NULL_HANDLE, &fences[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error creating fence! (%d)", (int)res);
-			MARS_RETURN_SET(MARS_RETURN_VULKAN_FAILURE);
+			MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 			goto renderer_vk_create_fences_fail;
 		}
 	}
@@ -1652,7 +1652,7 @@ void _RendererVKDestroyFences(VkDevice* _device, VkFence** _fences, uint32_t _ma
 VkFence* _RendererVKCreateEmptyFences(uint32_t _maxFrames) {
 	VkFence* fences = MARS_MALLOC(_maxFrames * sizeof(*fences));
 	if (!fences) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate fences buffer!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate fences buffer!");
 		return NULL;
 	}
 	for(uint32_t i = 0; i < _maxFrames; ++i) {

@@ -88,7 +88,6 @@
 	#define strcat_s(dest, dest_size, src) strcat(dest, src)
 	#define strcpy_s(dest, dest_size, src) strcpy(dest, src)
 #elif defined(MARS_OS_WINDOWS)
-	#define strdup _strdup
 #endif
 
 // Function name refrencing

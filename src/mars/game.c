@@ -9,7 +9,7 @@ void CreateGame(const char* _name) {
 	MARS_DEBUG_LOG("===Creating game state===");
 	MARS_GAME = MARS_CALLOC(1, sizeof(*MARS_GAME));
 	if (!MARS_GAME) {
-		MARS_ABORT(MARS_ERROR_STATUS_BAD_ALLOC, "Failed to allocate game state!");
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate game state!");
 		goto create_game_failed;
 	}
 
@@ -24,7 +24,7 @@ void CreateGame(const char* _name) {
 	};
 	MARS_DISPLAY = _CreateDisplay(displayDesc);
 	if (!MARS_DISPLAY) {
-		MARS_ABORT(MARS_ERROR_STATUS_GENERIC, "Failed to initialize display!");
+		MARS_ABORT(MARS_ERROR_CODE_GENERIC, "Failed to initialize display!");
 		goto create_game_failed;
 	}
 
@@ -32,7 +32,7 @@ void CreateGame(const char* _name) {
 	MARS_DEBUG_LOG("===Creating resource manager===");
 	MARS_RESOURCES = _CreateResourceManager();
 	if (!MARS_RESOURCES) {
-		MARS_ABORT(MARS_ERROR_STATUS_GENERIC, "Failed to initialize resource manager!");
+		MARS_ABORT(MARS_ERROR_CODE_GENERIC, "Failed to initialize resource manager!");
 		goto create_game_failed;
 	}
 

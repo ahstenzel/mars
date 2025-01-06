@@ -1,4 +1,5 @@
 #include "mars/std/stack.h"
+#include "mars/std/debug.h"
 
 size_t _stack_size(size_t element_size, size_t capacity) {
 	size_t c = element_size * capacity;
@@ -10,7 +11,10 @@ stack_t* _stack_factory(size_t element_size, size_t capacity) {
 	size_t buffer_size = _stack_size(element_size, capacity); 
 	if (buffer_size == 0) { return NULL; }
 	stack_t* stk = MARS_CALLOC(1, buffer_size);
-	if (!stk) { return NULL; }
+	if (!stk) { 
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate stack buffer!");
+		return NULL; 
+	}
 	stk->_capacity = capacity;
 	stk->_element_size = element_size;
 	return stk;

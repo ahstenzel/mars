@@ -35,6 +35,7 @@ set(mars_src
 	"${SRC_DIR}/external/inih/ini.c"
 	"${SRC_DIR}/external/aes/aes.c"
 	"${SRC_DIR}/external/lz4/lz4.c"
+	"${SRC_DIR}/external/stb/stb_image.c"
 )
 
 # Set outputs

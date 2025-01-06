@@ -10,6 +10,7 @@ typedef struct {
 	uint8_t* data;
 	unsigned int width;
 	unsigned int height;
+	unsigned int channels;
 } Texture2D;
 
 typedef struct {
@@ -49,6 +50,16 @@ void _DestroyResourceManager(ResourceManager* _resourceManager);
 ResourceList* _CreateResourceList(ResourceListDesc _desc);
 
 void _DestroyResourceList(ResourceList* _resourceList);
+
+void _DestroyResourceText(TextBuffer* _text);
+
+void _DestroyResourceData(DataBuffer* _data);
+
+void _DestroyResourceTexture2D(Texture2D* _texture);
+
+uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc);
+
+char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, const char* _type, size_t* _len);
 
 
 MARS_API resourceList_id LoadResourceFile(ResourceListDesc _desc);
