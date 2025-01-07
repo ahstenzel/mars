@@ -57,19 +57,19 @@ void _DestroyResourceData(DataBuffer* _data);
 
 void _DestroyResourceTexture2D(Texture2D* _texture);
 
-uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc);
+uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, char* _rsc);
 
-char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, const char* _type, size_t* _len);
+char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, char* _type, size_t* _len);
 
 
 MARS_API resourceList_id LoadResourceFile(ResourceListDesc _desc);
 
 MARS_API void UnloadResourceFile(resourceList_id _resourceList);
 
-MARS_API TextBuffer* GetResourceText(resourceList_id _resourceList, const char* _text);
+MARS_API TextBuffer* GetResourceText(resourceList_id _resourceList, char* _textName);
 
-MARS_API DataBuffer* GetResourceData(resourceList_id _resourceList, const char* _data);
+MARS_API DataBuffer* GetResourceData(resourceList_id _resourceList, char* _dataName);
 
-MARS_API Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _texture);
+MARS_API Texture2D* GetResourceTexture2D(resourceList_id _resourceList, char* _textureName);
 
 #endif // MARS_RESOURCE_H

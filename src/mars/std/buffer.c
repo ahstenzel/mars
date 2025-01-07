@@ -91,14 +91,14 @@ uint64_t buffer_get_u64(buffer_t* _buf, size_t _idx) {
 	return val;
 }
 
-size_t buffer_get_str(buffer_t* _buf, size_t _idx, size_t _max_size, char* _dest) {
+size_t buffer_get_str(buffer_t* _buf, size_t _idx, size_t _max_size, bool _halt, char* _dest) {
 	if (!_buf || _idx >= _buf->_length) { return 0; }
 
 	// Calculate destination size
 	uint8_t* ptr = &_buf->_buffer[_idx];
 	size_t sz = 0;
 	while(sz < _max_size && _idx + sz < _buf->_length) {
-		if (*(char*)(ptr++) == '\0') { break; }
+		if (*(char*)(ptr++) == '\0' && _halt) { break; }
 		sz++;
 	}
 

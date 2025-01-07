@@ -69,7 +69,7 @@ _umap_str_hash_t _umap_str_hash(_umap_str_key_t key) {
 	return hash;
 }
 
-void* _umap_str_insert(unordered_map_str_t** umap_str, const _umap_str_key_t key, void* data) {
+void* _umap_str_insert(unordered_map_str_t** umap_str, _umap_str_key_t key, void* data) {
 	// Error check
 	if (!umap_str || !(*umap_str)) { return NULL; }
 	unordered_map_str_t* _umap_str = *umap_str;
@@ -128,7 +128,7 @@ void* _umap_str_insert(unordered_map_str_t** umap_str, const _umap_str_key_t key
 	return _umap_str_node_data(_umap_str, pos);
 }
 
-void _umap_str_delete(unordered_map_str_t* umap_str, const _umap_str_key_t key) {
+void _umap_str_delete(unordered_map_str_t* umap_str, _umap_str_key_t key) {
 	// Error check
 	if (!umap_str) { return; }
 
@@ -161,7 +161,7 @@ void _umap_str_delete(unordered_map_str_t* umap_str, const _umap_str_key_t key) 
 	}
 }
 
-void* _umap_str_find(unordered_map_str_t* umap_str, const _umap_str_key_t key) {
+void* _umap_str_find(unordered_map_str_t* umap_str, _umap_str_key_t key) {
 	// Error check
 	if (!umap_str) { return NULL; }
 

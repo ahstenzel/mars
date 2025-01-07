@@ -30,8 +30,8 @@ create_resource_manager_fail:
 void _DestroyResourceManager(ResourceManager *_resourceManager) {
 	if (_resourceManager) {
 		// Free all resource lists
-		for(unordered_map_it_t* it = unordered_map_it(_resourceManager->_resourceLists); it; unordered_map_it_next(it)) {
-			ResourceList* resourceList = *(ResourceList**)it->data;
+		for(unordered_map_it_t* it = unordered_map_it(_resourceManager->_resourceLists); it; it = unordered_map_it_next(it)) {
+			ResourceList* resourceList = *(ResourceList**)(it->data);
 			_DestroyResourceList(resourceList);
 		}
 		unordered_map_destroy(_resourceManager->_resourceLists);
@@ -94,8 +94,8 @@ ResourceList* _CreateResourceList(ResourceListDesc _desc) {
 	fp = NULL;
 
 	// Verify file header
-	char header[4] = {'\0'};
-	buffer_get_str(resourceList->_resourceFileBuffer, 0, 4, &header[0]);
+	char header[5] = {'\0'};
+	buffer_get_str(resourceList->_resourceFileBuffer, 0, 4, true, &header[0]);
 	if (strncmp(header, "MARS", 4) != 0) {
 		MARS_DEBUG_WARN("Invalid resource file (%s)!", resourceList->_resourceFile);
 		MARS_RETURN_SET(MARS_RETURN_CODE_FILESYSTEM_FAILURE);
@@ -105,8 +105,8 @@ ResourceList* _CreateResourceList(ResourceListDesc _desc) {
 	// TODO Verify version
 
 	// Decrypt contents
-	char iv[32] = {'\0'};
-	buffer_get_str(resourceList->_resourceFileBuffer, 16, 32, &iv[0]);
+	char iv[33] = {'\0'};
+	buffer_get_str(resourceList->_resourceFileBuffer, 16, 32, true, &iv[0]);
 	if (resourceList->_resourcePassword) {
 		size_t decrypted_len = resourceList->_resourceFileBuffer->_length - 48;
 		struct AES_ctx ctx;
@@ -127,17 +127,17 @@ void _DestroyResourceList(ResourceList* _resourceList) {
 		MARS_FREE(_resourceList->_resourcePassword);
 
 		// Clear caches
-		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheText); it; unordered_map_str_it_next(it)) {
-			TextBuffer* textBuffer = *(TextBuffer**)it->data;
+		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheText); it; it = unordered_map_str_it_next(it)) {
+			TextBuffer* textBuffer = (TextBuffer*)it->data;
 			_DestroyResourceText(textBuffer);
 		}
-		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheData); it; unordered_map_str_it_next(it)) {
-			DataBuffer* dataBuffer = *(DataBuffer**)it->data;
+		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheData); it; it = unordered_map_str_it_next(it)) {
+			DataBuffer* dataBuffer = (DataBuffer*)it->data;
 			_DestroyResourceData(dataBuffer);
 		}
-		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheTexture2D); it; unordered_map_str_it_next(it)) {
-			Texture2D* texture2DBuffer = *(Texture2D**)it->data;
-			_DestroyResourceTexture2D(texture2DBuffer);
+		for(unordered_map_str_it_t* it = unordered_map_str_it(_resourceList->_cacheTexture2D); it; it = unordered_map_str_it_next(it)) {
+			Texture2D* texture2D = (Texture2D*)it->data;
+			_DestroyResourceTexture2D(texture2D);
 		}
 
 		// Clear structures
@@ -152,41 +152,38 @@ void _DestroyResourceList(ResourceList* _resourceList) {
 void _DestroyResourceText(TextBuffer *_text) {
 	if (_text) {
 		MARS_FREE(_text->data);
-		MARS_FREE(_text);
 	}
 }
 
 void _DestroyResourceData(DataBuffer *_buffer) {
 	if (_buffer) {
 		MARS_FREE(_buffer->data);
-		MARS_FREE(_buffer);
 	}
 }
 
 void _DestroyResourceTexture2D(Texture2D *_texture) {
 	if (_texture) {
 		MARS_FREE(_texture->data);
-		MARS_FREE(_texture);
 	}
 }
 
-uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc) {
+uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, char* _rsc) {
 	// Load from resource file
-	size_t max_len = strlen(_rsc);
+	long long max_len = (long long)strlen(_rsc);
 	size_t rsc_len = 0;
 	uint64_t file_table_off = buffer_get_u64(_resourceBuffer, 48);
-	while(rsc_len < max_len) {
+	while(max_len > 0) {
 		// Tokenize resource name
 		rsc_len = strcspn(_rsc, "/");
 		if (rsc_len == 0) {
 			MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 			goto seek_resource_in_buffer_fail;
 		}
-		char* tok = _mars_strndup(_rsc, rsc_len - 1);
+		char* tok = _mars_strndup(_rsc, rsc_len);
 
 		// Parse file table header
-		char file_table_sig[4] = {'\0'};
-		buffer_get_str(_resourceBuffer, 0, 4, &file_table_sig[0]);
+		char file_table_sig[5] = { '\0' };
+		buffer_get_str(_resourceBuffer, file_table_off, 4, true, &file_table_sig[0]);
 		if (strncmp(file_table_sig, "MRFT", 4) != 0) {
 			MARS_RETURN_SET(MARS_RETURN_CODE_FILESYSTEM_FAILURE);
 			goto seek_resource_in_buffer_fail;
@@ -195,19 +192,19 @@ uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc) {
 		uint32_t file_table_capacity = buffer_get_u32(_resourceBuffer, file_table_off + 8);
 
 		// Deserialize file table
-		char* file_table_ctrl_block = MARS_CALLOC(file_table_capacity, sizeof(*file_table_ctrl_block));
+		char* file_table_ctrl_block = MARS_CALLOC(file_table_capacity + 1, sizeof(*file_table_ctrl_block));
 		if (!file_table_ctrl_block) {
 			MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate file table control block!");
 			goto seek_resource_in_buffer_fail;
 		}
-		char* file_table_data_block = MARS_CALLOC(file_table_capacity * 40, sizeof(*file_table_data_block));
+		char* file_table_data_block = MARS_CALLOC((file_table_capacity * 40) + 1, sizeof(*file_table_data_block));
 		if (!file_table_data_block) {
 			MARS_FREE(file_table_ctrl_block);
 			MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate file table data block!");
 			goto seek_resource_in_buffer_fail;
 		}
-		buffer_get_str(_resourceBuffer, file_table_off + 12, file_table_capacity, file_table_ctrl_block);
-		buffer_get_str(_resourceBuffer, file_table_off + 12 + file_table_capacity, file_table_capacity * 40, file_table_data_block);
+		buffer_get_str(_resourceBuffer, file_table_off + 12, file_table_capacity, false, file_table_ctrl_block);
+		buffer_get_str(_resourceBuffer, file_table_off + 12 + file_table_capacity, file_table_capacity * 40, false, file_table_data_block);
 
 		// Search file table for token
 		_umap_str_hash_t h = _umap_str_hash(tok);
@@ -217,9 +214,9 @@ uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc) {
 			uint8_t ctrl = file_table_ctrl_block[pos];
 			_umap_str_hash_t h2 = _umap_str_h2(h);
 			if (ctrl == h2) {
-				char* key = &file_table_data_block[0] + (40 * pos);
-				if (strncmp(key, tok, 32)) {
-					file_table_off = buffer_get_u64(_resourceBuffer, file_table_off + 12 + file_table_capacity + (40 * pos) + 32);
+				char* key = file_table_data_block + (pos * 40);
+				if (strncmp(key, tok, max_len) == 0) {
+					file_table_off = buffer_get_u64(_resourceBuffer, file_table_off + 12 + file_table_capacity + (pos * 40) + 32);
 					break;
 				}
 			}
@@ -230,14 +227,12 @@ uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc) {
 				MARS_FREE(file_table_data_block);
 				goto seek_resource_in_buffer_fail;
 			}
-			else {
-				pos = (pos + 1) & (file_table_capacity - 1);
-			}
+			pos = (pos + 1) & (file_table_capacity - 1);
 		} while(pos != first_pos);
 
 		// Advance pointer
-		_rsc += rsc_len;
-		max_len -= rsc_len;
+		_rsc += (rsc_len + 1);
+		max_len -= (long long)(rsc_len + 1);
 		MARS_FREE(tok);
 		MARS_FREE(file_table_ctrl_block);
 		MARS_FREE(file_table_data_block);
@@ -247,12 +242,12 @@ uint64_t _SeekResourceInBuffer(buffer_t* _resourceBuffer, const char* _rsc) {
 seek_resource_in_buffer_fail:
 	return 0;
 }
-char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, const char* _type, size_t* _len) {
+char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, char* _type, size_t* _len) {
 	char* data_block = NULL;
 
 	// Read resource header
-	char data_block_sig[4] = {'\0'};
-	buffer_get_str(_resourceBuffer, _offset, 4, &data_block_sig[0]);
+	char data_block_sig[5] = {'\0'};
+	buffer_get_str(_resourceBuffer, _offset, 4, true, &data_block_sig[0]);
 	if (strncmp(data_block_sig, _type, 4) != 0) {
 		MARS_RETURN_SET(MARS_RETURN_CODE_FILESYSTEM_FAILURE);
 		goto get_resource_data_from_buffer_fail;
@@ -263,12 +258,12 @@ char* _GetResourceDataFromBuffer(buffer_t* _resourceBuffer, uint64_t _offset, co
 	uint64_t data_block_compressed_size = buffer_get_u64(_resourceBuffer, _offset + 24);
 	uint64_t data_block_uncompressed_size = buffer_get_u64(_resourceBuffer, _offset + 32);
 	_offset += 80; // Advance past data block header
-	data_block = MARS_CALLOC(data_block_compressed_size, sizeof(*data_block));
+	data_block = MARS_CALLOC(data_block_compressed_size + 1, sizeof(*data_block));
 	if (!data_block) {
 		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate resource data buffer!");
 		goto get_resource_data_from_buffer_fail;
 	}
-	buffer_get_str(_resourceBuffer, _offset, data_block_compressed_size, data_block);
+	buffer_get_str(_resourceBuffer, _offset, data_block_compressed_size, false, data_block);
 
 	// Decompress data
 	if (data_block_compressed_size != data_block_uncompressed_size) {
@@ -304,6 +299,7 @@ resourceList_id LoadResourceFile(ResourceListDesc _desc) {
 	MARS_RETURN_CLEAR;
 
 	// Load resource file
+	MARS_DEBUG_LOG("Loading resource file (%s)", _desc.resourceFile);
 	ResourceList* resourceList = _CreateResourceList(_desc);
 	if (!resourceList) {
 		MARS_DEBUG_WARN("Failed to load resource file!");
@@ -311,9 +307,10 @@ resourceList_id LoadResourceFile(ResourceListDesc _desc) {
 	}
 
 	// Add to global list
+	MARS_DEBUG_LOG("Adding to global resource list", _desc.resourceFile);
 	resourceList_id id = _mars_id_generate();
-	void* loadedResourceList = unordered_map_insert(MARS_RESOURCES->_resourceLists, id, resourceList);
-	MARS_ASSERT(loadedResourceList != NULL);
+	void* insertedResourceList = unordered_map_insert(MARS_RESOURCES->_resourceLists, id, &resourceList);
+	MARS_ASSERT(*(ResourceList**)insertedResourceList == resourceList);
 	return id;
 }
 
@@ -328,15 +325,15 @@ void UnloadResourceFile(resourceList_id _id) {
 	}
 }
 
-TextBuffer* GetResourceText(resourceList_id _resourceList, const char* _text) {
+TextBuffer* GetResourceText(resourceList_id _resourceList, char* _textName) {
 	return NULL;
 }
 
-DataBuffer* GetResourceData(resourceList_id _resourceList, const char* _data) {
+DataBuffer* GetResourceData(resourceList_id _resourceList, char* _dataName) {
 	return NULL;
 }
 
-Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _texture) {
+Texture2D* GetResourceTexture2D(resourceList_id _resourceList, char* _textureName) {
 	MARS_RETURN_CLEAR;
 	char* data_block = NULL;
 
@@ -346,7 +343,7 @@ Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _text
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_ID);
 		goto get_resource_texture_2d_fail;
 	}
-	if (_texture == NULL) { 
+	if (_textureName == NULL) {
 		MARS_DEBUG_WARN("NULL texture name!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto get_resource_texture_2d_fail;
@@ -359,20 +356,20 @@ Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _text
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_PARAMETER);
 		goto get_resource_texture_2d_fail;
 	}
-	ResourceList* resourceList = (ResourceList*)(data);
+	ResourceList* resourceList = *(ResourceList**)(data);
 
 	// Check cache
-	data = unordered_map_str_find(resourceList->_cacheTexture2D, _texture);
-	if (data) { return (Texture2D*)(data); }
+	data = unordered_map_str_find(resourceList->_cacheTexture2D, _textureName);
+	if (data) { return *(Texture2D**)(data); }
 
 	// Get offset of data in buffer
-	uint64_t resourceOff = _SeekResourceInBuffer(resourceList->_resourceFileBuffer, _texture);
+	uint64_t resourceOff = _SeekResourceInBuffer(resourceList->_resourceFileBuffer, _textureName);
 	if (resourceOff == 0) {
 		if (MARS_RETURN_CODE == MARS_RETURN_CODE_INVALID_ID) {
-			MARS_DEBUG_WARN("Failed to find texture (%s)!", _texture);
+			MARS_DEBUG_WARN("Failed to find texture (%s)!", _textureName);
 		}
 		else if (MARS_RETURN_CODE == MARS_RETURN_CODE_INVALID_PARAMETER) {
-			MARS_DEBUG_WARN("Invalid texture name (%s)!", _texture);
+			MARS_DEBUG_WARN("Invalid texture name (%s)!", _textureName);
 		}
 		else if (MARS_RETURN_CODE == MARS_RETURN_CODE_FILESYSTEM_FAILURE) {
 			MARS_DEBUG_WARN("Invalid resource file (%s)!", resourceList->_resourceFile);
@@ -385,10 +382,10 @@ Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _text
 	data_block = _GetResourceDataFromBuffer(resourceList->_resourceFileBuffer, resourceOff, "MIMG", &data_block_len);
 	if (!data_block) {
 		if (MARS_RETURN_CODE == MARS_RETURN_CODE_RESOURCE_FAILURE) {
-			MARS_DEBUG_WARN("Failed to decompress texture data (%s)!", _texture);
+			MARS_DEBUG_WARN("Failed to decompress texture data (%s)!", _textureName);
 		}
 		else if (MARS_RETURN_CODE == MARS_RETURN_CODE_FILESYSTEM_FAILURE) {
-			MARS_DEBUG_WARN("Failed to validate texture data (%s)!", _texture);
+			MARS_DEBUG_WARN("Failed to validate texture data (%s)!", _textureName);
 		}
 		goto get_resource_texture_2d_fail;
 	}
@@ -396,10 +393,10 @@ Texture2D* GetResourceTexture2D(resourceList_id _resourceList, const char* _text
 	// Parse & cache data
 	Texture2D texture = { 0 };
 	texture.data = stbi_load_from_memory(data_block, (int)data_block_len, &texture.width, &texture.height, &texture.channels, 0);
-	void* cached_data = unordered_map_str_insert(resourceList->_cacheTexture2D, _texture, &texture);
-	MARS_ASSERT(cached_data != NULL);
+	void* insertedData = unordered_map_str_insert(resourceList->_cacheTexture2D, _textureName, &texture);
+	MARS_ASSERT(insertedData != NULL);
 
-	return cached_data;
+	return insertedData;
 get_resource_texture_2d_fail:
 	MARS_FREE(data_block);
 	return NULL;

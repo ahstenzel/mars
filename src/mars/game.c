@@ -45,12 +45,12 @@ create_game_failed:
 void DestroyGame() {
 	if (MARS_GAME) {
 		MARS_DEBUG_LOG("===Destroying game state===");
-		MARS_DEBUG_LOG("Destroying settings");
-		_DestroySettings(MARS_SETTINGS);
-		MARS_DEBUG_LOG("Destroying display");
-		_DestroyDisplay(MARS_DISPLAY);
 		MARS_DEBUG_LOG("Destroying resource manager");
 		_DestroyResourceManager(MARS_RESOURCES);
+		MARS_DEBUG_LOG("Destroying display");
+		_DestroyDisplay(MARS_DISPLAY);
+		MARS_DEBUG_LOG("Destroying settings");
+		_DestroySettings(MARS_SETTINGS);
 		MARS_FREE(MARS_GAME);
 		MARS_GAME = NULL;
 	}

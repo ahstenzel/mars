@@ -110,11 +110,11 @@ unordered_map_str_t* _umap_str_resize(unordered_map_str_t*, size_t);
 
 _umap_str_hash_t _umap_str_hash(_umap_str_key_t);
 
-void* _umap_str_insert(unordered_map_str_t**, const _umap_str_key_t, void*);
+void* _umap_str_insert(unordered_map_str_t**, _umap_str_key_t, void*);
 
-void _umap_str_delete(unordered_map_str_t*, const _umap_str_key_t);
+void _umap_str_delete(unordered_map_str_t*, _umap_str_key_t);
 
-void* _umap_str_find(unordered_map_str_t*, const _umap_str_key_t);
+void* _umap_str_find(unordered_map_str_t*, _umap_str_key_t);
 
 unordered_map_str_it_t* _umap_str_it(unordered_map_str_t*);
 
