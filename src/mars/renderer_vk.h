@@ -1,10 +1,11 @@
-#ifndef MARS_RENDERER_H
-#define MARS_RENDERER_H
+#ifndef MARS_RENDERER_VK_H
+#define MARS_RENDERER_VK_H
 /**
  * renderer.h
  * Declarations for Vulkan helper functions.
  */
 #include "mars/common.h"
+#include "mars/vertex.h"
 
 /// @brief Container for vulkan renderer state.
 typedef struct {
@@ -27,6 +28,8 @@ typedef struct {
 	VkPipelineLayout _pipelineLayout;
 	VkPipeline _graphicsPipeline;
 	VkCommandPool _commandPool;
+	VkBuffer _vertexBuffer;
+	VkDeviceMemory _vertexBufferMemory;
 	uint32_t _physicalDeviceIdx;
 	uint32_t _numPhysicalDevices;
 	uint32_t _graphicsQueueMode;
@@ -35,6 +38,8 @@ typedef struct {
 	bool _framebufferResized;
 } RendererVulkan;
 
+extern Vertex _mars_g_renderer_vk_test_vertex_data[];
+extern uint32_t _mars_g_renderer_vk_test_vertex_num;
 
 //----------------------------------------------------------------------------------
 // Engine functions
@@ -209,7 +214,7 @@ VkCommandBuffer* _RendererVKCreateCommandBuffers(VkDevice* _device, VkCommandPoo
 
 void _RendererVKDestroyCommandBuffers(VkDevice* _device, VkCommandBuffer** _commandBuffers, VkCommandPool* _commandPool, uint32_t _numCommandBuffers);
 
-void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, uint32_t _numCommandBuffers);
+void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, uint32_t _numCommandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, VkBuffer* _vertexBuffers, VkDeviceSize* _vertexBufferOffsets, uint32_t _numVertexBuffers);
 
 
 //----------------------------------------------------------------------------------
@@ -228,4 +233,24 @@ VkFence* _RendererVKCreateEmptyFences(uint32_t _maxFrames);
 
 void _RendererVKDestroyEmptyFences(VkFence** _fences);
 
-#endif // MARS_RENDERER_H
+
+//----------------------------------------------------------------------------------
+// Memory allocation
+//----------------------------------------------------------------------------------
+
+uint32_t _RendererVkFindMemoryType(VkPhysicalDevice* _physicalDevice, uint32_t _typeFilter, VkMemoryPropertyFlags _properties);
+
+
+//----------------------------------------------------------------------------------
+// Vertex buffers
+//----------------------------------------------------------------------------------
+
+VkVertexInputBindingDescription _RendererVkGetVertexBindingDescription();
+
+VkVertexInputAttributeDescription* _RendererVkGetVertexAttributeDescriptions(uint32_t* _destNumAttributes);
+
+void _RendererVkCreateVertexBuffer(VkDevice* _device, VkPhysicalDevice* _physicalDevice, VkBuffer* _destVertexBuffer, VkDeviceMemory* _destVertexBufferMemory);
+
+void _RendererVkDestroyVertexBuffer(VkDevice* _device, VkBuffer* _vertexBuffer, VkDeviceMemory* _vertexBufferMemory);
+
+#endif // MARS_RENDERER_VK_H

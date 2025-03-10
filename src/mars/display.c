@@ -78,7 +78,6 @@ void _UpdateDisplay(Display* _display) {
 			_RendererVKUpdate((RendererVulkan*)_display->_renderer);
 		break;
 	}
-	_RendererVKUpdate(_display->_renderer);
 }
 
 bool _DisplayShouldClose(Display* _display) {

@@ -32,6 +32,7 @@ set(mars_src
 	"${SRC_DIR}/mars/settings.c"
 	"${SRC_DIR}/mars/renderer_vk.c"
 	"${SRC_DIR}/mars/resource.c"
+	"${SRC_DIR}/mars/vertex.c"
 	"${SRC_DIR}/external/inih/ini.c"
 	"${SRC_DIR}/external/aes/aes.c"
 	"${SRC_DIR}/external/lz4/lz4.c"

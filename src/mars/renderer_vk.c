@@ -5,6 +5,13 @@
 #define MARS_PHYSICAL_DEVICE(w) ((w)->_physicalDevices[(w)->_physicalDeviceIdx])
 #define MARS_VK_RENDERER ((RendererVulkan*)MARS_DISPLAY->_renderer)
 
+Vertex _mars_g_renderer_vk_test_vertex_data[] = {
+	{.pos = { 0.0f, -0.5f}, .color = {1.0f, 0.0f, 0.0f}},
+	{.pos = { 0.5f,  0.5f}, .color = {0.0f, 1.0f, 0.0f}},
+	{.pos = {-0.5f,  0.5f}, .color = {0.0f, 0.0f, 1.0f}}
+};
+uint32_t _mars_g_renderer_vk_test_vertex_num = MARS_BUFF_LEN(_mars_g_renderer_vk_test_vertex_data);
+
 static void _RendererVKFramebufferResizeCallback(GLFWwindow* _window, int _width, int _height) {
 	RendererVulkan* renderer = glfwGetWindowUserPointer(_window);
 	renderer->_framebufferResized = true;
@@ -120,11 +127,19 @@ RendererVulkan* _RendererVKCreate(GLFWwindow* _window) {
 	_RendererVKDestroyShaderModule(&renderer->_device, &vertexShaderModule);
 	_RendererVKDestroyShaderCode(&vertexShaderCode);
 
+	// Create command pools
+	MARS_DEBUG_LOG("Creating command pools");
+	renderer->_commandPool = _RendererVKCreateCommandPool(&renderer->_device, bestGraphicsQueueFamilyIndex);
+
+	// Create test vertex buffer
+	MARS_DEBUG_LOG("Creating test vertex buffer");
+	_RendererVkCreateVertexBuffer(&renderer->_device, &MARS_PHYSICAL_DEVICE(renderer), &renderer->_vertexBuffer, &renderer->_vertexBufferMemory);
+
 	// Create command buffers
 	MARS_DEBUG_LOG("Creating command buffers");
-	renderer->_commandPool = _RendererVKCreateCommandPool(&renderer->_device, bestGraphicsQueueFamilyIndex);
 	renderer->_commandBuffers = _RendererVKCreateCommandBuffers(&renderer->_device, &renderer->_commandPool, renderer->_numSwapchainImages);
-	_RendererVKRecordCommandBuffers(&renderer->_commandBuffers, &renderer->_renderPass, &renderer->_framebuffers, &bestSwapchainExtent, &renderer->_graphicsPipeline, renderer->_numSwapchainImages);
+	VkDeviceSize vertexBufferOffsets[] = {0};
+	_RendererVKRecordCommandBuffers(&renderer->_commandBuffers, renderer->_numSwapchainImages, &renderer->_renderPass, &renderer->_framebuffers, &bestSwapchainExtent, &renderer->_graphicsPipeline, &renderer->_vertexBuffer, vertexBufferOffsets, 1);
 
 	// Create semaphores
 	MARS_DEBUG_LOG("Creating semaphores");
@@ -158,6 +173,7 @@ void _RendererVKDestroy(RendererVulkan* _renderer) {
 		_RendererVKDestroyImageViews(&_renderer->_device, &_renderer->_swapchainImageViews, _renderer->_numSwapchainImages);
 		_RendererVKDestroySwapchainImages(&_renderer->_swapchainImages);
 		_RendererVKDestroySwapchain(&_renderer->_device, &_renderer->_swapchain);
+		_RendererVkDestroyVertexBuffer(&_renderer->_device, &_renderer->_vertexBuffer, &_renderer->_vertexBufferMemory);
 		_RendererVKDestroySurface(&_renderer->_surface, &_renderer->_instance);
 		_RendererVKDestroyDevice(&_renderer->_device);
 		_RendererVKDestroyPhysicalDevices(&_renderer->_physicalDevices);
@@ -257,7 +273,8 @@ void _RendererVKRecreateSwapchain(RendererVulkan* _renderer, GLFWwindow* _window
 	_renderer->_swapchainImages = _RendererVKGetSwapchainImages(&_renderer->_device, &_renderer->_swapchain, _renderer->_numSwapchainImages);
 	_renderer->_swapchainImageViews = _RendererVKCreateImageViews(&_renderer->_device, &_renderer->_swapchainImages, &bestSurfaceFormat, _renderer->_numSwapchainImages, imageArrayLayers);
 	_renderer->_framebuffers = _RendererVKCreateFramebuffers(&_renderer->_device, &_renderer->_renderPass, &bestSwapchainExtent, &_renderer->_swapchainImageViews, _renderer->_numSwapchainImages);
-	_RendererVKRecordCommandBuffers(&_renderer->_commandBuffers, &_renderer->_renderPass, &_renderer->_framebuffers, &bestSwapchainExtent, &_renderer->_graphicsPipeline, _renderer->_numSwapchainImages);
+	VkDeviceSize vertexBufferOffsets[] = {0};
+	_RendererVKRecordCommandBuffers(&_renderer->_commandBuffers, _renderer->_numSwapchainImages, &_renderer->_renderPass, &_renderer->_framebuffers, &bestSwapchainExtent, &_renderer->_graphicsPipeline, &_renderer->_vertexBuffer, vertexBufferOffsets, 1);
 }
 
 void _RendererVKCleanupSwapchain(RendererVulkan* _renderer) {
@@ -360,12 +377,12 @@ VkDevice _RendererVKCreateDevice(VkPhysicalDevice* _physicalDevice, uint32_t _nu
 
 	// Error check
 	if (!_physicalDevice) {
-		MARS_DEBUG_WARN("Invalid physical device reference!");
+		MARS_DEBUG_WARN("NULL physical device!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_create_device_fail;
 	}
 	if (!_queueFamilyProperties) {
-		MARS_DEBUG_WARN("Invalid queue device properties reference!");
+		MARS_DEBUG_WARN("NULL queue device properties!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_create_device_fail;
 	}
@@ -449,7 +466,7 @@ uint32_t _RendererVKGetPhysicalDeviceNumber(VkInstance* _instance) {
 
 	// Error check
 	if (!_instance) {
-		MARS_DEBUG_WARN("Invalid vulkan instance!");
+		MARS_DEBUG_WARN("NULL vulkan instance!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
@@ -471,7 +488,7 @@ VkPhysicalDevice* _RendererVKGetPhysicalDevices(VkInstance* _instance, uint32_t 
 
 	// Error check
 	if (!_instance) {
-		MARS_DEBUG_WARN("Invalid vulkan instance!");
+		MARS_DEBUG_WARN("NULL vulkan instance!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_physical_devices_fail;
 	}
@@ -515,7 +532,7 @@ uint32_t _RendererVKGetBestPhysicalDeviceIndex(VkPhysicalDevice* _physicalDevice
 
 	// Error check
 	if (!_physicalDevices) {
-		MARS_DEBUG_WARN("Invalid physical device buffer!");
+		MARS_DEBUG_WARN("NULL physical device buffer!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_best_physical_device_index_fail;
 	}
@@ -592,7 +609,7 @@ uint32_t _RendererVKGetPhysicalDeviceTotalMemory(VkPhysicalDeviceMemoryPropertie
 
 	// Error check
 	if (!_properties) {
-		MARS_DEBUG_WARN("Invalid physical device proeprty buffer!");
+		MARS_DEBUG_WARN("NULL physical device proeprty buffer!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
@@ -612,7 +629,7 @@ uint32_t _RendererVKGetQueueFamilyNumber(VkPhysicalDevice* _physicalDevice) {
 
 	// Error check
 	if (!_physicalDevice) {
-		MARS_DEBUG_WARN("Invalid physical device reference!");
+		MARS_DEBUG_WARN("NULL physical device reference!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 0;
 	}
@@ -629,7 +646,7 @@ VkQueueFamilyProperties* _RendererVKGetQueueFamilyProperties(VkPhysicalDevice* _
 
 	// Error check
 	if (!_physicalDevice) {
-		MARS_DEBUG_WARN("Invalid physical device reference!");
+		MARS_DEBUG_WARN("NULL physical device!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_queue_family_properties_fail;
 	}
@@ -667,7 +684,7 @@ uint32_t _RendererVKGetBestGraphicsQueueFamilyIndex(VkQueueFamilyProperties* _qu
 
 	// Error check
 	if (!_queueFamilyProperties) {
-		MARS_DEBUG_WARN("Invalid queue family properties reference!");
+		MARS_DEBUG_WARN("NULL queue family properties!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_best_graphics_queue_family_index_fail;
 	}
@@ -704,7 +721,7 @@ uint32_t _RendererVKGetGraphicsQueueMode(VkQueueFamilyProperties* _queueFamilyPr
 
 	// Error check
 	if (!_queueFamilyProperties) {
-		MARS_DEBUG_WARN("Invalid queue family properties reference!");
+		MARS_DEBUG_WARN("NULL queue family properties!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return 2;
 	}
@@ -722,7 +739,7 @@ VkQueue _RendererVKGetDrawingQueue(VkDevice* _device, uint32_t _graphicsQueueFam
 
 	// Error check
 	if (!_device) {
-		MARS_DEBUG_WARN("Invalid device reference!");
+		MARS_DEBUG_WARN("NULL device!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return drawingQueue;
 	}
@@ -738,7 +755,7 @@ VkQueue _RendererVKGetPresentingQueue(VkDevice* _device, uint32_t _graphicsQueue
 
 	// Error check
 	if (!_device) {
-		MARS_DEBUG_WARN("Invalid device reference!");
+		MARS_DEBUG_WARN("NULL device!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		return presentingQueue;
 	}
@@ -1157,7 +1174,7 @@ char* _RendererVKGetShaderCode(const char* _filename, uint32_t* _shaderSize) {
 
 	// Validate inputs
 	if (!_shaderSize) {
-		MARS_DEBUG_WARN("NULL file size destination pointer!");
+		MARS_DEBUG_WARN("NULL file size destination!");
 		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
 		goto renderer_vk_get_shader_code_fail;
 	}
@@ -1272,14 +1289,19 @@ VkPipelineShaderStageCreateInfo _RendererVKConfigureFragmentShaderStageCreateInf
 }
 
 VkPipelineVertexInputStateCreateInfo _RendererVKConfigureVertexInputStateCreateInfo() {
+	uint32_t vertexBindingDescriptionCount = 1;
+	VkVertexInputBindingDescription vertexBindingDescription = _RendererVkGetVertexBindingDescription();
+	uint32_t vertexAttributeDescriptionCount = 0;
+	VkVertexInputAttributeDescription* vertexAttributeDescription = _RendererVkGetVertexAttributeDescriptions(&vertexAttributeDescriptionCount);
+
 	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo = {
 		VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 		VK_NULL_HANDLE,
 		0,
-		0,
-		VK_NULL_HANDLE,
-		0,
-		VK_NULL_HANDLE
+		vertexBindingDescriptionCount,
+		&vertexBindingDescription,
+		vertexAttributeDescriptionCount,
+		vertexAttributeDescription
 	};
 
 	return vertexInputStateCreateInfo;
@@ -1343,6 +1365,7 @@ VkPipeline _RendererVKCreateGraphicsPipeline(VkDevice* _device, VkPipelineLayout
 		MARS_DEBUG_WARN("Vulkan error creating graphics pipeline! (%d)", (int)res);
 		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
 	}
+	MARS_FREE((void*)vertexInputStateCreateInfo.pVertexAttributeDescriptions);
 	return graphicsPipeline;
 }
 
@@ -1520,7 +1543,7 @@ void _RendererVKDestroyCommandBuffers(VkDevice* _device, VkCommandBuffer** _comm
 	MARS_FREE(*_commandBuffers);
 }
 
-void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, uint32_t _numCommandBuffers) {
+void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, uint32_t _numCommandBuffers, VkRenderPass* _renderPass, VkFramebuffer** _framebuffers, VkExtent2D* _extent, VkPipeline* _pipeline, VkBuffer* _vertexBuffers, VkDeviceSize* _vertexBufferOffsets, uint32_t _numVertexBuffers) {
 	MARS_RETURN_CLEAR;
 	VkCommandBufferBeginInfo* commandBufferBeginInfos = NULL;
 	VkRenderPassBeginInfo* renderPassBeginInfos = NULL;
@@ -1563,7 +1586,10 @@ void _RendererVKRecordCommandBuffers(VkCommandBuffer** _commandBuffers, VkRender
 		}
 		vkCmdBeginRenderPass((*_commandBuffers)[i], &renderPassBeginInfos[i], VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline((*_commandBuffers)[i], VK_PIPELINE_BIND_POINT_GRAPHICS, *_pipeline);
-		vkCmdDraw((*_commandBuffers)[i], 3, 1, 0, 0);
+
+		vkCmdBindVertexBuffers((*_commandBuffers)[i], 0, _numVertexBuffers, _vertexBuffers, _vertexBufferOffsets);
+
+		vkCmdDraw((*_commandBuffers)[i], _mars_g_renderer_vk_test_vertex_num, 1, 0, 0);
 		vkCmdEndRenderPass((*_commandBuffers)[i]);
 		if ((res = vkEndCommandBuffer((*_commandBuffers)[i])) != VK_SUCCESS) {
 			MARS_DEBUG_WARN("Vulkan error ending command submission! (%d)", (int)res);
@@ -1663,4 +1689,128 @@ VkFence* _RendererVKCreateEmptyFences(uint32_t _maxFrames) {
 
 void _RendererVKDestroyEmptyFences(VkFence** _fences) {
 	MARS_FREE(*_fences);
+}
+
+uint32_t _RendererVkFindMemoryType(VkPhysicalDevice* _physicalDevice, uint32_t _typeFilter, VkMemoryPropertyFlags _properties) {
+	VkPhysicalDeviceMemoryProperties memProperties;
+	vkGetPhysicalDeviceMemoryProperties(*_physicalDevice, &memProperties);
+	for(uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
+		if ((_typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & _properties) == _properties) {
+			return i;
+		}
+	}
+
+	MARS_DEBUG_WARN("Failed to find suitable memory type!");
+	MARS_RETURN_SET(MARS_RETURN_CODE_GENERIC_ERROR);
+	return 0;
+}
+
+VkVertexInputBindingDescription _RendererVkGetVertexBindingDescription() {
+	VkVertexInputBindingDescription bindingDescription = {
+		0,
+		sizeof(Vertex),
+		VK_VERTEX_INPUT_RATE_VERTEX
+	};
+	return bindingDescription;
+}
+
+VkVertexInputAttributeDescription* _RendererVkGetVertexAttributeDescriptions(uint32_t* _destNumAttributes) {
+	MARS_RETURN_CLEAR;
+	VkVertexInputAttributeDescription* attributeDescriptions = NULL;
+
+	if (!_destNumAttributes) {
+		MARS_DEBUG_WARN("NULL attribute count destination!");
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
+		goto renderer_vk_get_vertex_attribute_descriptions_fail;
+	}
+	*_destNumAttributes = 2;
+
+	attributeDescriptions = MARS_MALLOC(2 * sizeof *attributeDescriptions);
+	if (!attributeDescriptions) {
+		MARS_ABORT(MARS_ERROR_CODE_BAD_ALLOC, "Failed to allocate vertex attribute description buffer!");
+		goto renderer_vk_get_vertex_attribute_descriptions_fail;
+	}
+
+	// Position
+	attributeDescriptions[0].binding = 0;
+	attributeDescriptions[0].location = 0;
+	attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+	attributeDescriptions[0].offset = offsetof(Vertex, pos);
+
+	// Color
+	attributeDescriptions[1].binding = 0;
+	attributeDescriptions[1].location = 1;
+	attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+	attributeDescriptions[1].offset = offsetof(Vertex, color);
+
+	return attributeDescriptions;
+renderer_vk_get_vertex_attribute_descriptions_fail:
+	MARS_FREE(attributeDescriptions);
+	return NULL;
+}
+
+void _RendererVkCreateVertexBuffer(VkDevice* _device, VkPhysicalDevice* _physicalDevice, VkBuffer* _destVertexBuffer, VkDeviceMemory* _destVertexBufferMemory) {
+	MARS_RETURN_CLEAR;
+	VkResult res;
+	
+	// Check parameters
+	if (!_destVertexBuffer) {
+		MARS_DEBUG_WARN("NULL vertex buffer destination!");
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
+		goto renderer_vk_create_vertex_buffer_fail;
+	}
+	if (!_destVertexBufferMemory) {
+		MARS_DEBUG_WARN("NULL vertex buffer memory destination!");
+		MARS_RETURN_SET(MARS_RETURN_CODE_INVALID_REFERENCE);
+		goto renderer_vk_create_vertex_buffer_fail;
+	}
+
+	// Create buffer
+	VkBufferCreateInfo bufferInfo = {
+		VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+		VK_NULL_HANDLE,
+		0,
+		sizeof(*_mars_g_renderer_vk_test_vertex_data) * _mars_g_renderer_vk_test_vertex_num,
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+		VK_SHARING_MODE_EXCLUSIVE
+	};
+	if ((res = vkCreateBuffer(*_device, &bufferInfo, VK_NULL_HANDLE, _destVertexBuffer)) != VK_SUCCESS) {
+		MARS_DEBUG_WARN("Vulkan error creating vertex buffer! (%d)", (int)res);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
+	}
+
+	// Allocate memory
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(*_device, *_destVertexBuffer, &memRequirements);
+	VkMemoryAllocateInfo allocInfo = {
+		VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+		VK_NULL_HANDLE,
+		memRequirements.size,
+		_RendererVkFindMemoryType(_physicalDevice, memRequirements.memoryTypeBits,
+			(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT))
+	};
+	if ((res = vkAllocateMemory(*_device, &allocInfo, VK_NULL_HANDLE, _destVertexBufferMemory)) != VK_SUCCESS) {
+		MARS_DEBUG_WARN("Vulkan error allocating vertex buffer memory! (%d)", (int)res);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
+	}
+	
+	// Bind memory to buffer
+	if ((res = vkBindBufferMemory(*_device, *_destVertexBuffer, *_destVertexBufferMemory, 0)) != VK_SUCCESS) {
+		MARS_DEBUG_WARN("Vulkan error binding vertex buffer to allocation! (%d)", (int)res);
+		MARS_RETURN_SET(MARS_RETURN_CODE_BACKEND_FAILURE);
+	}
+
+	// Copy vertex data to buffer
+	void* vertexData;
+	vkMapMemory(*_device, *_destVertexBufferMemory, 0, bufferInfo.size, 0, &vertexData);
+	memcpy_s(vertexData, (size_t)bufferInfo.size, _mars_g_renderer_vk_test_vertex_data, (size_t)bufferInfo.size);
+	vkUnmapMemory(*_device, *_destVertexBufferMemory);
+
+renderer_vk_create_vertex_buffer_fail:
+	return;
+}
+
+void _RendererVkDestroyVertexBuffer(VkDevice* _device, VkBuffer* _vertexBuffer, VkDeviceMemory* _vertexBufferMemory) {
+	vkDestroyBuffer(*_device, *_vertexBuffer, VK_NULL_HANDLE);
+	vkFreeMemory(*_device, *_vertexBufferMemory, VK_NULL_HANDLE);
 }
